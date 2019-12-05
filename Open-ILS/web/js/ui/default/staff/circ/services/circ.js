@@ -459,7 +459,7 @@ function($uibModal , $q , egCore , egAlertDialog , egConfirmDialog,  egAddCopyAl
 
         } 
 
-        if (options.suppress_checkin_popups
+        if (options.suppress_popups
             && evt.filter(function(e){return service.checkin_suppress_overrides.indexOf(e.textcode) == -1;}).length == 0) {
             // Events are suppressed.  Re-run the checkin w/ override.
             options.override = true;
@@ -1606,7 +1606,7 @@ function($uibModal , $q , egCore , egAlertDialog , egConfirmDialog,  egAddCopyAl
 
         var copy = evt && evt.payload ? evt.payload.copy : null;
 
-        if (copy && !options.suppress_checkin_popups
+        if (copy && !options.suppress_popups
             && copy.location().checkin_alert() == 't') {
 
             return egAlertDialog.open(
@@ -1685,7 +1685,7 @@ function($uibModal , $q , egCore , egAlertDialog , egConfirmDialog,  egAddCopyAl
                     case 11: /* CATALOGING */
                         egCore.audio.play('info.checkin.cataloging');
                         evt[0].route_to = egCore.strings.ROUTE_TO_CATALOGING;
-                        if (options.no_precat_alert)
+                        if (options.no_precat_alert || options.suppress_popups)
                             return $q.when(final_resp);
                         return egAlertDialog.open(
                             egCore.strings.PRECAT_CHECKIN_MSG, params)
@@ -1712,6 +1712,7 @@ function($uibModal , $q , egCore , egAlertDialog , egConfirmDialog,  egAddCopyAl
 
             case 'ASSET_COPY_NOT_FOUND':
                 egCore.audio.play('error.checkin.not_found');
+                if (options.suppress_popups) return $q.when(final_resp);
                 return egAlertDialog.open(
                     egCore.strings.UNCAT_ALERT_DIALOG, params)
                     .result.then(function() {return final_resp});
@@ -1719,7 +1720,7 @@ function($uibModal , $q , egCore , egAlertDialog , egConfirmDialog,  egAddCopyAl
             case 'ITEM_NOT_CATALOGED':
                 egCore.audio.play('error.checkin.not_cataloged');
                 evt[0].route_to = egCore.strings.ROUTE_TO_CATALOGING;
-                if (options.no_precat_alert) 
+                if (options.no_precat_alert || options.suppress_popups)
                     return $q.when(final_resp);
                 return egAlertDialog.open(
                     egCore.strings.PRECAT_CHECKIN_MSG, params)
@@ -1844,7 +1845,7 @@ function($uibModal , $q , egCore , egAlertDialog , egConfirmDialog,  egAddCopyAl
 
             // when auto-print is on, skip the dialog and go straight
             // to printing.
-            if (options.auto_print_holds_transits) 
+            if (options.auto_print_holds_transits || options.suppress_popups) 
                 return print_transit(template);
 
             return $uibModal.open({
