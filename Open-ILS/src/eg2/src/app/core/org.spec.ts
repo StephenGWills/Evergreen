@@ -5,6 +5,7 @@ import {AuthService} from './auth.service';
 import {PcrudService} from './pcrud.service';
 import {StoreService} from './store.service';
 import {OrgService} from './org.service';
+import {HatchService} from './hatch.service';
 
 describe('OrgService', () => {
     let idlService: IdlService;
@@ -14,11 +15,13 @@ describe('OrgService', () => {
     let orgService: OrgService;
     let evtService: EventService;
     let storeService: StoreService;
+    let hatchService: HatchService;
 
     beforeEach(() => {
         idlService = new IdlService();
         evtService = new EventService();
-        storeService = new StoreService(null /* CookieService */);
+        hatchService = new HatchService();
+        storeService = new StoreService(null /* CookieService */, hatchService);
         netService = new NetService(evtService);
         authService = new AuthService(evtService, netService, storeService);
         pcrudService = new PcrudService(idlService, netService, authService);
@@ -59,6 +62,12 @@ describe('OrgService', () => {
     it('should provide root', () => {
         initTestData();
         expect(orgService.root().id()).toEqual(1);
+    });
+
+    it('should sort tree by shortname', () => {
+        initTestData();
+        orgService.sortTree('shortname');
+        expect(orgService.root().children()[0].shortname()).toEqual('A');
     });
 
 });

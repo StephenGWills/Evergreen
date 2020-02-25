@@ -217,6 +217,7 @@
   [rowFlairCallback]="btGridRowFlairCallback"
   [cellClassCallback]="btGridCellClassCallback"
   [stickyHeader]="true"
+  [cellTextGenerator]="btGridCellTextGenerator"
   [sortable]="true">
   <eg-grid-toolbar-action label="Action that needs a single row" i18n-label
     (onClick)="complimentEvergreen($event)" [disableOnRows]="notOneSelectedRow">
@@ -265,7 +266,6 @@
   [dataSource]="acpSource"
   [filterable]="true"
   [sortable]="true"
-  [showLinkSelectors]="true"
   [stickyHeader]="true"
   showFields="barcode,location,circ_lib,price,dummy_title,create_date"
 >
@@ -402,4 +402,17 @@
       </eg-fm-record-editor>
     </div>
   </div>
+</div>
+
+<div class="mt-4 mb-4">
+  <h4>Grid Stock Selector Display and Filtering</h4>
+  <eg-grid #eventsGrid idlClass="atevdef"
+    [dataSource]="eventsDataSource"
+    showFields="name,hook,validator,reactor"
+    [sortable]="true" [filterable]="true">
+    <!-- demo how explicit fields and auto fields support link field selector
+         display and filtering consisently without additional biolerplate -->
+    <eg-grid-column name="name"></eg-grid-column>
+    <eg-grid-column name="hook"></eg-grid-column>
+  </eg-grid>
 </div>

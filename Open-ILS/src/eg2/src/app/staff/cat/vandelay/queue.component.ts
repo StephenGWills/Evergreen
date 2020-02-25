@@ -10,7 +10,7 @@ import {AuthService} from '@eg/core/auth.service';
 import {ConfirmDialogComponent} from '@eg/share/dialog/confirm.component';
 import {ProgressDialogComponent} from '@eg/share/dialog/progress.component';
 import {GridComponent} from '@eg/share/grid/grid.component';
-import {GridDataSource, GridColumn} from '@eg/share/grid/grid';
+import {GridDataSource, GridColumn, GridCellTextGenerator} from '@eg/share/grid/grid';
 import {VandelayService, VandelayImportSelection,
     VANDELAY_EXPORT_PATH} from './vandelay.service';
 
@@ -38,6 +38,8 @@ export class QueueComponent implements OnInit, AfterViewInit {
     @ViewChild('confirmDelDlg', { static: false }) confirmDelDlg: ConfirmDialogComponent;
     @ViewChild('progressDlg', { static: true }) progressDlg: ProgressDialogComponent;
 
+    cellTextGenerator: GridCellTextGenerator;
+
     constructor(
         private router: Router,
         private route: ActivatedRoute,
@@ -57,6 +59,11 @@ export class QueueComponent implements OnInit, AfterViewInit {
             return this.loadQueueRecords(pager);
         };
 
+        this.cellTextGenerator = {
+            '+matches': row => row.matches.length + '',
+            'import_error': row => (row.import_error == null) ? '' : row.import_error,
+            'imported_as': row => row.imported_as + ''
+        };
     }
 
     ngOnInit() {

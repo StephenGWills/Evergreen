@@ -30,6 +30,7 @@ export class GridColumn {
     ternaryBool: boolean;
     timezoneContextOrg: number;
     cellTemplate: TemplateRef<any>;
+
     cellContext: any;
     isIndex: boolean;
     isDragTarget: boolean;
@@ -176,23 +177,32 @@ export class GridColumnSet {
 
         let idlParent;
         let idlField;
-        let idlClass = this.idl.classes[this.idlClass];
+        let idlClass;
+        let nextIdlClass = this.idl.classes[this.idlClass];
 
         const pathParts = dotpath.split(/\./);
 
         for (let i = 0; i < pathParts.length; i++) {
+
             const part = pathParts[i];
             idlParent = idlField;
+            idlClass = nextIdlClass;
             idlField = idlClass.field_map[part];
 
-            if (idlField) {
-                if (idlField['class'] && (
-                    idlField.datatype === 'link' ||
-                    idlField.datatype === 'org_unit')) {
-                    idlClass = this.idl.classes[idlField['class']];
-                }
-            } else {
-                return null;
+            if (!idlField) { return null; } // invalid IDL path
+
+            if (i === pathParts.length - 1) {
+                // No more links to process.
+                break;
+            }
+
+            if (idlField['class'] && (
+                idlField.datatype === 'link' ||
+                idlField.datatype === 'org_unit')) {
+                // The link class on the current field refers to the
+                // class of the link destination, not the current field.
+                // Mark it for processing during the next iteration.
+                nextIdlClass = this.idl.classes[idlField['class']];
             }
         }
 
@@ -215,14 +225,16 @@ export class GridColumnSet {
 
     applyColumnDefaults(col: GridColumn) {
 
-        if (!col.idlFieldDef && col.path) {
-            const idlInfo = this.idlInfoFromDotpath(col.path);
+        if (!col.idlFieldDef) {
+            const idlInfo = this.idlInfoFromDotpath(col.path || col.name);
             if (idlInfo) {
                 col.idlFieldDef = idlInfo.idlField;
                 col.idlClass = idlInfo.idlClass.name;
+                if (!col.datatype) {
+                    col.datatype = col.idlFieldDef.datatype;
+                }
                 if (!col.label) {
                     col.label = col.idlFieldDef.label || col.idlFieldDef.name;
-                    col.datatype = col.idlFieldDef.datatype;
                 }
             }
         }
@@ -385,6 +397,20 @@ export class GridColumnSet {
     }
 }
 
+// Maps colunm names to functions which return plain text values for
+// each mapped column on a given row.  This is primarily useful for
+// generating print-friendly content for grid cells rendered via
+// cellTemplate.
+//
+// USAGE NOTE: Since a cellTemplate can be passed arbitrary context
+//             but a GridCellTextGenerator only gets the row object,
+//             if it's important to include content that's not available
+//             by default in the row object, you may want to stick
+//             it in the row object as an additional attribute.
+//
+export interface GridCellTextGenerator {
+    [columnName: string]: (row: any) => string;
+}
 
 export class GridRowSelector {
     indexes: {[string: string]: boolean};
@@ -479,9 +505,9 @@ export class GridContext {
     defaultVisibleFields: string[];
     defaultHiddenFields: string[];
     overflowCells: boolean;
-    showLinkSelectors: boolean;
     disablePaging: boolean;
     showDeclaredFieldsOnly: boolean;
+    cellTextGenerator: GridCellTextGenerator;
 
     // Allow calling code to know when the select-all-rows-in-page
     // action has occurred.
@@ -797,11 +823,15 @@ export class GridContext {
 
 
     getColumnTextContent(row: any, col: GridColumn): string {
-        if (col.cellTemplate) {
-            // TODO
-            // Extract the text content from the rendered template.
+        if (this.columnHasTextGenerator(col)) {
+            const str = this.cellTextGenerator[col.name](row);
+            return (str === null || str === undefined)  ? '' : str;
         } else {
-            return this.getRowColumnValue(row, col);
+            if (col.cellTemplate) {
+                return ''; // avoid 'undefined' values
+            } else {
+                return this.getRowColumnValue(row, col);
+            }
         }
     }
 
@@ -1057,14 +1087,6 @@ export class GridContext {
             col.isIndex = (field.name === pkeyField);
             col.isAuto = true;
 
-            if (this.showLinkSelectors) {
-                const selector = this.idl.getLinkSelector(
-                    this.columnSet.idlClass, field.name);
-                if (selector) {
-                    col.path = field.name + '.' + selector;
-                }
-            }
-
             if (this.showDeclaredFieldsOnly) {
                 col.hidden = true;
             }
@@ -1090,6 +1112,10 @@ export class GridContext {
     getGridConfig(persistKey: string): Promise<GridPersistConf> {
         if (!persistKey) { return Promise.resolve(null); }
         return this.store.getItem('eg.grid.' + persistKey);
+    }
+
+    columnHasTextGenerator(col: GridColumn): boolean {
+        return this.cellTextGenerator && col.name in this.cellTextGenerator;
     }
 }
 

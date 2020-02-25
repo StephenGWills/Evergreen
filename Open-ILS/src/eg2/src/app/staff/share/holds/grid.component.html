@@ -31,7 +31,7 @@
     </div>
 
     <eg-grid #holdsGrid [dataSource]="gridDataSource" [sortable]="true"
-      [useLocalSort]="enablePreFetch"
+      [useLocalSort]="enablePreFetch" [cellTextGenerator]="cellTextGenerator"
       [multiSortable]="true" [persistKey]="persistKey"
       (onRowActivate)="showDetail($event)">
 
@@ -100,7 +100,7 @@
           {{hold.ucard_barcode}}
         </a>
       </ng-template>
-      <eg-grid-column i18n-label label="Patron Barcode" 
+      <eg-grid-column i18n-label label="Patron Barcode" name="patron_barcode"
         [cellTemplate]="userBarcodeTmpl" [hidden]="true"></eg-grid-column>
 
       <eg-grid-column i18n-label label="Patron alias" path="usr_alias"></eg-grid-column>
@@ -118,8 +118,8 @@
           {{hold.title}}
         </a>
       </ng-template>
-      <eg-grid-column i18n-label label="Title" [hidden]="true"
-          name='title' [cellTemplate]="titleTmpl"></eg-grid-column>
+      <eg-grid-column i18n-label label="Title" [hidden]="true" name='title' 
+        [cellTemplate]="titleTmpl"></eg-grid-column>
       <eg-grid-column i18n-label label="Author" path='author'
           [hidden]="true"></eg-grid-column>
       <eg-grid-column i18n-label label="Potential Items" path='potentials' datatype="int">

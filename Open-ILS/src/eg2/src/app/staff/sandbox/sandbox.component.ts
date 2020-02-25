@@ -5,7 +5,7 @@ import {ProgressDialogComponent} from '@eg/share/dialog/progress.component';
 import {ToastService} from '@eg/share/toast/toast.service';
 import {StringService} from '@eg/share/string/string.service';
 import {map, take} from 'rxjs/operators';
-import {GridDataSource, GridColumn, GridRowFlairEntry} from '@eg/share/grid/grid';
+import {GridDataSource, GridColumn, GridRowFlairEntry, GridCellTextGenerator} from '@eg/share/grid/grid';
 import {IdlService, IdlObject} from '@eg/core/idl.service';
 import {PcrudService} from '@eg/core/pcrud.service';
 import {OrgService} from '@eg/core/org.service';
@@ -22,6 +22,7 @@ import {StringComponent} from '@eg/share/string/string.component';
 import {GridComponent} from '@eg/share/grid/grid.component';
 import * as Moment from 'moment-timezone';
 import {SampleDataService} from '@eg/share/util/sample-data.service';
+import {HtmlToTxtService} from '@eg/share/util/htmltotxt.service';
 
 @Component({
   templateUrl: 'sandbox.component.html',
@@ -61,7 +62,9 @@ export class SandboxComponent implements OnInit {
     cbAsyncSource: (term: string) => Observable<ComboboxEntry>;
 
     btSource: GridDataSource = new GridDataSource();
+    btGridCellTextGenerator: GridCellTextGenerator;
     acpSource: GridDataSource = new GridDataSource();
+    eventsDataSource: GridDataSource = new GridDataSource();
     editSelected: (rows: IdlObject[]) => void;
     @ViewChild('acpGrid', { static: true }) acpGrid: GridComponent;
     @ViewChild('acpEditDialog', { static: true }) editDialog: FmRecordEditorComponent;
@@ -114,7 +117,8 @@ export class SandboxComponent implements OnInit {
         private toast: ToastService,
         private format: FormatService,
         private printer: PrintService,
-        private samples: SampleDataService
+        private samples: SampleDataService,
+        private h2txt: HtmlToTxtService
     ) {
         // BroadcastChannel is not yet defined in PhantomJS and elsewhere
         this.sbChannel = (typeof BroadcastChannel === 'undefined') ?
@@ -198,6 +202,14 @@ export class SandboxComponent implements OnInit {
             }));
         };
 
+        // GridCellTextGenerator for the btGrid; note that this
+        // also demonstrates that a GridCellTextGenerator only has
+        // access to the row, and does not have access to any additional
+        // context that might be passed to a cellTemplate
+        this.btGridCellTextGenerator = {
+            test: row => 'HELLO universe ' + row.id()
+        };
+
         this.acpSource.getRows = (pager: Pager, sort: any[]) => {
             const orderBy: any = {acp: 'id'};
             if (sort.length) {
@@ -219,10 +231,37 @@ export class SandboxComponent implements OnInit {
             return this.pcrud.search('acp',
                 query, {
                 flesh: 1,
-                flesh_fields: {acp: ['location', 'status']},
+                flesh_fields: {acp: ['location', 'status', 'creator', 'editor']},
                 offset: pager.offset,
                 limit: pager.limit,
                 order_by: orderBy
+            });
+        };
+
+        this.eventsDataSource.getRows = (pager: Pager, sort: any[]) => {
+
+            const orderEventsBy: any = {atevdef: 'name'};
+            if (sort.length) {
+                orderEventsBy.atevdef = sort[0].name + ' ' + sort[0].dir;
+            }
+
+            const base: Object = {};
+            base[this.idl.classes['atevdef'].pkey] = {'!=' : null};
+            const query: any = new Array();
+            query.push(base);
+
+            Object.keys(this.eventsDataSource.filters).forEach(key => {
+                Object.keys(this.eventsDataSource.filters[key]).forEach(key2 => {
+                    query.push(this.eventsDataSource.filters[key][key2]);
+                });
+            });
+
+            return this.pcrud.search('atevdef', query, {
+                flesh: 1,
+                flesh_fields: {atevdef: ['hook', 'validator', 'reactor']},
+                offset: pager.offset,
+                limit: pager.limit,
+                order_by: orderEventsBy
             });
         };
 
@@ -271,6 +310,9 @@ export class SandboxComponent implements OnInit {
                     }
             } )
         });
+
+        const str = 'C&#xe9;sar&nbsp;&amp;&nbsp;Me';
+        console.log(this.h2txt.htmlToTxt(str));
     }
 
     sbChannelHandler = msg => {

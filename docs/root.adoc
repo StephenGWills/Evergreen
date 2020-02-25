@@ -603,7 +603,10 @@ image::media/caution.png[]
 
 image::media/tip.png[]
 
+
+[appendix]
+include::glossary.adoc[]
+
 [index]
 Index
 =====
-

@@ -1,11 +1,18 @@
 import {Component, OnInit, AfterViewInit, Renderer2} from '@angular/core';
-import {ActivatedRoute} from '@angular/router';
+import {Router, ActivatedRoute, NavigationEnd} from '@angular/router';
 import {IdlObject} from '@eg/core/idl.service';
 import {OrgService} from '@eg/core/org.service';
 import {CatalogService} from '@eg/share/catalog/catalog.service';
 import {CatalogSearchContext, CatalogSearchState} from '@eg/share/catalog/search-context';
 import {StaffCatalogService} from './catalog.service';
 import {NgbTabset, NgbTabChangeEvent} from '@ng-bootstrap/ng-bootstrap';
+
+// Maps opac-style default tab names to local tab names.
+const LEGACY_TAB_NAME_MAP = {
+    expert: 'marc',
+    numeric: 'ident',
+    advanced: 'term'
+};
 
 @Component({
   selector: 'eg-catalog-search-form',
@@ -21,8 +28,12 @@ export class SearchFormComponent implements OnInit, AfterViewInit {
     copyLocations: IdlObject[];
     searchTab: string;
 
+    // Display the full form if true, otherwise display the expandy.
+    showThyself = true;
+
     constructor(
         private renderer: Renderer2,
+        private router: Router,
         private route: ActivatedRoute,
         private org: OrgService,
         private cat: CatalogService,
@@ -37,6 +48,16 @@ export class SearchFormComponent implements OnInit, AfterViewInit {
         this.route.queryParams.subscribe(params => {
             if (params.searchTab) {
                 this.searchTab = params.searchTab;
+            }
+        });
+
+        this.router.events.subscribe(routeEvent => {
+            if (routeEvent instanceof NavigationEnd) {
+                if (routeEvent.url.match(/catalog\/record/)) {
+                    this.showThyself = false;
+                } else {
+                    this.showThyself = true;
+                }
             }
         });
     }
@@ -73,9 +94,18 @@ export class SearchFormComponent implements OnInit, AfterViewInit {
                     this.searchTab = 'ident';
                 } else if (this.context.browseSearch.isSearchable()) {
                     this.searchTab = 'browse';
-                } else {
-                    // Default tab
+                } else if (this.context.termSearch.isSearchable()) {
                     this.searchTab = 'term';
+
+                } else {
+
+                    this.searchTab =
+                        LEGACY_TAB_NAME_MAP[this.staffCat.defaultTab]
+                        || this.staffCat.defaultTab || 'term';
+
+                }
+
+                if (this.searchTab === 'term') {
                     this.refreshCopyLocations();
                 }
             }
@@ -238,6 +268,16 @@ export class SearchFormComponent implements OnInit, AfterViewInit {
 
     searchIsActive(): boolean {
         return this.context.searchState === CatalogSearchState.SEARCHING;
+    }
+
+    // It's possible to chose invalid combos depending on the order of selection
+    preventBogusCombos(idx: number) {
+        if (this.context.termSearch.fieldClass[idx] === 'keyword') {
+            const op = this.context.termSearch.matchOp[idx];
+            if (op === 'exact' || op === 'starts') {
+                this.context.termSearch.matchOp[idx] = 'contains';
+            }
+        }
     }
 }
 

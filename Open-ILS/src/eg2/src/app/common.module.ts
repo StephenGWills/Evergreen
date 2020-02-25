@@ -13,9 +13,9 @@ Note core services are injected into 'root'.
 They do not have to be added to the providers list.
 */
 
-// consider moving these to core...
-import {HatchService} from '@eg/share/print/hatch.service';
+import {HtmlToTxtService} from '@eg/share/util/htmltotxt.service';
 import {PrintService} from '@eg/share/print/print.service';
+import {AnonCacheService} from '@eg/share/util/anon-cache.service';
 
 // Globally available components
 import {PrintComponent} from '@eg/share/print/print.component';
@@ -79,7 +79,8 @@ export class EgCommonModule {
         return {
             ngModule: EgCommonModule,
             providers: [
-                HatchService,
+                AnonCacheService,
+                HtmlToTxtService,
                 PrintService,
                 ToastService
             ]

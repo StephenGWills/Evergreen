@@ -72,16 +72,16 @@ function($q , $timeout , $location , egCore , egConfirmDialog) {
     var service = {};
 
     service.get_all = function() {
-        return egCore.hatch.getItem('eg.workstation.all')
+        return egCore.hatch.getWorkstations()
         .then(function(all) { return all || [] });
     }
 
     service.get_default = function() {
-        return egCore.hatch.getItem('eg.workstation.default');
+        return egCore.hatch.getDefaultWorkstation();
     }
 
     service.set_default = function(name) {
-        return egCore.hatch.setItem('eg.workstation.default', name);
+        return egCore.hatch.setDefaultWorkstation(name);
     }
 
     service.register_workstation = function(base_name, name, org_id) {
@@ -140,7 +140,7 @@ function($q , $timeout , $location , egCore , egConfirmDialog) {
         return service.get_all()
         .then(function(all) {
             all.push(new_ws);
-            return egCore.hatch.setItem('eg.workstation.all', all)
+            return egCore.hatch.setWorkstations(all)
             .then(function() { return new_ws });
         });
     }
@@ -150,13 +150,13 @@ function($q , $timeout , $location , egCore , egConfirmDialog) {
     service.remove_workstation = function(name) {
         console.debug('Removing workstation: ' + name);
 
-        return egCore.hatch.getItem('eg.workstation.all')
+        return egCore.hatch.getWorkstations()
 
         // remove from list of all workstations
         .then(function(all) {
             if (!all) all = [];
             var keep = all.filter(function(ws) {return ws.name != name});
-            return egCore.hatch.setItem('eg.workstation.all', keep)
+            return egCore.hatch.setWorkstations(keep);
 
         }).then(function() { 
 
@@ -165,7 +165,7 @@ function($q , $timeout , $location , egCore , egConfirmDialog) {
         }).then(function(def) {
             if (def == name) {
                 console.debug('Removing default workstation: ' + name);
-                return egCore.hatch.removeItem('eg.workstation.default');
+                return egCore.hatch.removeDefaultWorkstation();
             }
         });
     }
@@ -234,8 +234,13 @@ function($scope , egCore) {
     $scope.setContentType = function(type) { $scope.contentType = type }
     $scope.setContentType('text/plain');
 
+    var hatchPrinting = false;
+    egCore.hatch.usePrinting().then(function(answer) {
+        hatchPrinting = answer;
+    });
+
     $scope.useHatchPrinting = function() {
-        return egCore.hatch.usePrinting();
+        return hatchPrinting;
     }
 
     $scope.hatchIsOpen = function() {
@@ -274,8 +279,12 @@ function($scope , egCore) {
     }
 
     function loadPrinterOptions(name) {
-        egCore.hatch.getPrinterOptions(name).then(
-            function(options) {$scope.printerOptions = options});
+        if (name == 'hatch_file_writer') {
+            $scope.printerOptions = {};
+        } else {
+            egCore.hatch.getPrinterOptions(name).then(
+                function(options) {$scope.printerOptions = options});
+        }
     }
 
     $scope.setPrinter = function(name) {
@@ -306,6 +315,13 @@ function($scope , egCore) {
         }
     }
 
+    $scope.useFileWriter = function() {
+        return (
+            $scope.printConfig[$scope.context] &&
+            $scope.printConfig[$scope.context].printer == 'hatch_file_writer'
+        );
+    }
+
     // Load startup data....
     // Don't bother talking to Hatch if it's not there.
     if (!egCore.hatch.hatchAvailable) return;
@@ -314,6 +330,12 @@ function($scope , egCore) {
     egCore.hatch.getPrinters()
     .then(function(printers) { 
         $scope.printers = printers;
+
+        printers.push({
+            // We need a static name for saving configs.
+            // Human-friendly label is set in the template.
+            name: 'hatch_file_writer' 
+        });
 
         var def = $scope.getPrinterByAttr('is-default', true);
         if (!def && printers.length) def = printers[0];
@@ -823,6 +845,10 @@ function($scope , $q , $window , $location , egCore , egAlertDialog , workstatio
 
     console.log('set context org to ' + $scope.contextOrg);
 
+    egCore.hatch.hostname().then(function(name) {
+        $scope.newWSName = name || '';
+    });
+
     // fetch workstation reg perms
     egCore.perm.hasPermAt('REGISTER_WORKSTATION', true)
     .then(function(orgList) { 
@@ -959,15 +985,18 @@ function($scope , egCore , ngToast) {
     var hatch = egCore.hatch;  // convenience
 
     $scope.hatch_available = hatch.hatchAvailable;
-    $scope.hatch_printing = hatch.usePrinting();
     $scope.hatch_settings = hatch.useSettings();
     $scope.hatch_offline  = hatch.useOffline();
+
+    hatch.usePrinting().then(function(answer) {
+        $scope.hatch_printing = answer;
+    });
 
     // Apply Hatch settings as changes occur in the UI.
     
     $scope.$watch('hatch_printing', function(newval) {
         if (typeof newval != 'boolean') return;
-        hatch.setLocalItem('eg.hatch.enable.printing', newval);
+        hatch.setItem('eg.hatch.enable.printing', newval);
     });
 
     $scope.$watch('hatch_settings', function(newval) {

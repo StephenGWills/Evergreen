@@ -5,7 +5,7 @@ import {NetService} from '@eg/core/net.service';
 import {StaffCatalogService} from '../catalog.service';
 import {Pager} from '@eg/share/util/pager';
 import {OrgService} from '@eg/core/org.service';
-import {GridDataSource} from '@eg/share/grid/grid';
+import {GridDataSource, GridColumn, GridCellTextGenerator} from '@eg/share/grid/grid';
 import {GridComponent} from '@eg/share/grid/grid.component';
 
 @Component({
@@ -29,6 +29,8 @@ export class CopiesComponent implements OnInit {
         }
     }
 
+    cellTextGenerator: GridCellTextGenerator;
+
     constructor(
         private net: NetService,
         private org: OrgService,
@@ -51,6 +53,13 @@ export class CopiesComponent implements OnInit {
                     && copy.location_holdable === 't'
                     && copy.status_holdable === 't';
             }
+        };
+
+        this.cellTextGenerator = {
+            callnumber: row => (`${row.call_number_prefix_label} ` +
+                `${row.call_number_label} ${row.call_number_suffix_label}`).trim(),
+            holdable: row => this.copyContext.holdable(row),
+            barcode: row => row.barcode
         };
     }
 

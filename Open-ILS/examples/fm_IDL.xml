@@ -1322,7 +1322,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
 
 	<class id="ath" controller="open-ils.cstore open-ils.pcrud" oils_obj:fieldmapper="action_trigger::hook" oils_persist:tablename="action_trigger.hook" reporter:label="Trigger Hook Point">
 		<fields oils_persist:primary="key">
-			<field reporter:label="Hook Key" name="key" reporter:datatype="text"/>
+			<field reporter:label="Hook Key" name="key" reporter:datatype="text" reporter:selector="key"/>
 			<field reporter:label="Core Type" name="core_type" reporter:datatype="text"/>
 			<field reporter:label="Description" name="description" reporter:datatype="text" oils_persist:i18n="true"/>
 			<field reporter:label="Passive" name="passive"  reporter:datatype="bool"/>
@@ -1340,7 +1340,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
 
 	<class id="atcol" controller="open-ils.cstore" oils_obj:fieldmapper="action_trigger::collector" oils_persist:tablename="action_trigger.collector" reporter:label="Trigger Environment Collector">
 		<fields oils_persist:primary="module">
-			<field reporter:label="Module Name" name="module" reporter:datatype="text"/>
+			<field reporter:label="Module Name" name="module" reporter:datatype="text" reporter:selector="module"/>
 			<field reporter:label="Description" name="description" reporter:datatype="text" oils_persist:i18n="true"/>
 		</fields>
 		<links/>
@@ -1348,7 +1348,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
 
 	<class id="atval" controller="open-ils.cstore open-ils.pcrud" oils_obj:fieldmapper="action_trigger::validator" oils_persist:tablename="action_trigger.validator" reporter:label="Trigger Condition Validator">
 		<fields oils_persist:primary="module">
-			<field reporter:label="Module Name" name="module" reporter:datatype="text"/>
+			<field reporter:label="Module Name" name="module" reporter:datatype="text" reporter:selector="module"/>
 			<field reporter:label="Description" name="description" reporter:datatype="text" oils_persist:i18n="true"/>
 		</fields>
 		<links/>
@@ -1364,7 +1364,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
 
 	<class id="atreact" controller="open-ils.cstore open-ils.pcrud" oils_obj:fieldmapper="action_trigger::reactor" oils_persist:tablename="action_trigger.reactor" reporter:label="Trigger Event Reactor">
 		<fields oils_persist:primary="module">
-			<field reporter:label="Module Name" name="module" reporter:datatype="text"/>
+			<field reporter:label="Module Name" name="module" reporter:datatype="text" reporter:selector="module"/>
 			<field reporter:label="Description" name="description" reporter:datatype="text" oils_persist:i18n="true"/>
 		</fields>
 		<links/>
@@ -1380,7 +1380,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
 
 	<class id="atclean" controller="open-ils.cstore open-ils.pcrud" oils_obj:fieldmapper="action_trigger::cleanup" oils_persist:tablename="action_trigger.cleanup" reporter:label="Trigger Event Cleanup">
 		<fields oils_persist:primary="module">
-			<field reporter:label="Module Name" name="module" reporter:datatype="text"/>
+			<field reporter:label="Module Name" name="module" reporter:datatype="text" reporter:selector="module"/>
 			<field reporter:label="Description" name="description" reporter:datatype="text" oils_persist:i18n="true"/>
 		</fields>
 		<links/>
@@ -10742,6 +10742,7 @@ SELECT  usr,
         </fields>
         <links>
             <link field="requesting_usr" reltype="has_a" key="id" map="" class="au"/>
+            <link field="home_ou" reltype="has_a" key="id" map="" class="aou"/>
         </links>
     </class>
 
@@ -12755,8 +12756,8 @@ SELECT  usr,
 	<class id="cfg" controller="open-ils.cstore open-ils.pcrud" oils_obj:fieldmapper="config::floating_group" oils_persist:tablename="config.floating_group" reporter:label="Floating Group">
 		<fields oils_persist:primary="id" oils_persist:sequence="config.floating_group_id_seq">
 			<field reporter:label="ID" name="id" reporter:selector="name" reporter:datatype="id"/>
-			<field reporter:label="Name" name="name" reporter:datatype="text"/>
-			<field reporter:label="Manual" name="manual" reporter:datatype="bool"/>
+			<field reporter:label="Name" name="name" reporter:datatype="text" oils_obj:required="true"/>
+			<field reporter:label="Manual" name="manual" reporter:datatype="bool" oils_obj:required="true"/>
 			<field reporter:label="Group Members" name="members" oils_persist:virtual="true" reporter:datatype="link"/>
 		</fields>
 		<links>
@@ -12774,11 +12775,11 @@ SELECT  usr,
 	<class id="cfgm" controller="open-ils.cstore open-ils.pcrud" oils_obj:fieldmapper="config::floating_group_member" oils_persist:tablename="config.floating_group_member" reporter:label="Floating Group Members">
 		<fields oils_persist:primary="id" oils_persist:sequence="config.floating_group_member_id_seq">
 			<field reporter:label="ID" name="id" reporter:datatype="id"/>
-			<field reporter:label="Floating Group" name="floating_group" reporter:datatype="link"/>
-			<field reporter:label="Org Unit" name="org_unit" reporter:datatype="link"/>
-			<field reporter:label="Stop Depth" name="stop_depth" reporter:datatype="int"/>
+			<field reporter:label="Floating Group" name="floating_group" reporter:datatype="link" oils_obj:required="true"/>
+			<field reporter:label="Org Unit" name="org_unit" reporter:datatype="link" oils_obj:required="true"/>
+			<field reporter:label="Stop Depth" name="stop_depth" reporter:datatype="int" oils_obj:required="true"/>
 			<field reporter:label="Max Depth" name="max_depth" reporter:datatype="int"/>
-			<field reporter:label="Exclude" name="exclude" reporter:datatype="bool"/>
+			<field reporter:label="Exclude" name="exclude" reporter:datatype="bool" oils_obj:required="true"/>
 		</fields>
 		<links>
 			<link field="floating_group" reltype="has_a" key="id" class="cfg"/>
@@ -13019,10 +13020,10 @@ SELECT  usr,
 		</links>
 		<permacrud xmlns="http://open-ils.org/spec/opensrf/IDL/permacrud/v1">
 			<actions>
-				<create permission="ADMIN_CAROUSEL" global_required="true"/>
-				<retrieve/>
-				<update permission="ADMIN_CAROUSEL" global_required="true"/>
-				<delete permission="ADMIN_CAROUSEL" global_required="true"/>
+				<create permission="ADMIN_CAROUSEL" context_field="owner"/>
+				<retrieve permission="ADMIN_CAROUSEL" context_field="owner"/>
+				<update permission="ADMIN_CAROUSEL" context_field="owner"/>
+				<delete permission="ADMIN_CAROUSEL" context_field="owner"/>
 			</actions>
 		</permacrud>
 	</class>
@@ -13045,10 +13046,18 @@ SELECT  usr,
 		</links>
 		<permacrud xmlns="http://open-ils.org/spec/opensrf/IDL/permacrud/v1">
 			<actions>
-				<create permission="ADMIN_CAROUSEL" global_required="true"/>
-				<retrieve/>
-				<update permission="ADMIN_CAROUSEL" global_required="true"/>
-				<delete permission="ADMIN_CAROUSEL" global_required="true"/>
+				<create permission="ADMIN_CAROUSEL">
+				    <context link="carousel" field="owner" />
+				</create>
+				<retrieve permission="ADMIN_CAROUSEL">
+				    <context link="carousel" field="owner" />
+				</retrieve>
+				<update permission="ADMIN_CAROUSEL">
+				    <context link="carousel" field="owner" />
+				</update>
+				<delete permission="ADMIN_CAROUSEL">
+				    <context link="carousel" field="owner" />
+				</delete>
 			</actions>
 		</permacrud>
 	</class>

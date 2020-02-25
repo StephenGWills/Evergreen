@@ -25,10 +25,10 @@
               invisible when they are not needed. -->
         <span *ngIf="row.treeNode.expanded"
           [ngClass]="{invisible: row.copy || row.treeNode.children.length == 0}"
-          class="material-icons p-0 m-0">arrow_drop_down</span>
+          class="material-icons p-0 m-0">keyboard_arrow_down</span>
         <span *ngIf="!row.treeNode.expanded"
           [ngClass]="{invisible: row.copy || row.treeNode.children.length == 0}"
-          class="material-icons p-0 m-0">arrow_right</span>
+          class="material-icons p-0 m-0">keyboard_arrow_right</span>
         <span>{{row.locationLabel}}</span>
       </a>
     </span>
@@ -57,7 +57,7 @@
 <div class='eg-copies w-100 mt-3'>
   <eg-grid #holdingsGrid [dataSource]="gridDataSource"
     (onRowActivate)="onRowActivate($event)" [disablePaging]="true"
-    [rowClassCallback]="rowClassCallback"
+    [rowClassCallback]="rowClassCallback" [cellTextGenerator]="cellTextGenerator"
     [sortable]="false" persistKey="cat.holdings">
 
     <!-- checkboxes / filters -->

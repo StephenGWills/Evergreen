@@ -54,6 +54,7 @@ function($uibModal , $q , egCore , egAlertDialog , egConfirmDialog,  egAddCopyAl
         'PATRON_EXCEEDS_OVERDUE_COUNT',
         'PATRON_EXCEEDS_CHECKOUT_COUNT',
         'PATRON_EXCEEDS_FINES',
+        'PATRON_EXCEEDS_LONGOVERDUE_COUNT',
         'PATRON_BARRED',
         'CIRC_EXCEEDS_COPY_RANGE',
         'ITEM_DEPOSIT_REQUIRED',
@@ -80,7 +81,8 @@ function($uibModal , $q , egCore , egAlertDialog , egConfirmDialog,  egAddCopyAl
         'PATRON_BARRED',
         'PATRON_EXCEEDS_LOST_COUNT',
         'PATRON_EXCEEDS_CHECKOUT_COUNT',
-        'PATRON_EXCEEDS_FINES'
+        'PATRON_EXCEEDS_FINES',
+        'PATRON_EXCEEDS_LONGOVERDUE_COUNT'
     ]
 
 
@@ -90,11 +92,13 @@ function($uibModal , $q , egCore , egAlertDialog , egConfirmDialog,  egAddCopyAl
         'PATRON_EXCEEDS_LOST_COUNT',
         'PATRON_EXCEEDS_CHECKOUT_COUNT',
         'PATRON_EXCEEDS_FINES',
+        'PATRON_EXCEEDS_LONGOVERDUE_COUNT',
         'CIRC_EXCEEDS_COPY_RANGE',
         'ITEM_DEPOSIT_REQUIRED',
         'ITEM_RENTAL_FEE_REQUIRED',
         'ITEM_DEPOSIT_PAID',
         'COPY_CIRC_NOT_ALLOWED',
+        'COPY_NOT_AVAILABLE',
         'COPY_IS_REFERENCE',
         'COPY_ALERT_MESSAGE',
         'COPY_NEEDED_FOR_HOLD',
@@ -355,7 +359,7 @@ function($uibModal , $q , egCore , egAlertDialog , egConfirmDialog,  egAddCopyAl
             data.mbts = payload.parent_circ.billable_transaction().summary();
 
         if (!data.route_to) {
-            if (data.transit) {
+            if (data.transit && !data.transit.dest_recv_time() && !data.transit.cancel_time()) {
                 data.route_to = data.transit.dest().shortname();
             } else if (data.acp) {
                 data.route_to = data.acp.location().name();
@@ -1309,18 +1313,17 @@ function($uibModal , $q , egCore , egAlertDialog , egConfirmDialog,  egAddCopyAl
     service.mark_damaged = function(params) {
         if (!params) return $q.when();
         return $uibModal.open({
+            backdrop: 'static',
             templateUrl: './circ/share/t_mark_damaged',
             controller:
                 ['$scope', '$uibModalInstance', 'egCore', 'egBilling', 'egItem',
                 function($scope, $uibModalInstance, egCore, egBilling, egItem) {
                     var doRefresh = params.refresh;
                     
+                    $scope.showBill = params.charge != null && params.circ;
                     $scope.billArgs = {charge: params.charge};
                     $scope.mode = 'charge';
                     $scope.barcode = params.barcode;
-                    if (params.charge && params.charge > 0) {
-                        $scope.applyFine = "apply";
-                    }
                     if (params.circ) {
                         $scope.circ = params.circ;
                         $scope.circ_checkin_time = params.circ.checkin_time();
@@ -1335,12 +1338,10 @@ function($uibModal , $q , egCore , egAlertDialog , egConfirmDialog,  egAddCopyAl
                     $scope.btnChargeFees = function() {
                         $scope.mode = 'charge';
                         $scope.billArgs.charge = params.charge;
-                        $scope.applyFine = "apply";
                     }
                     $scope.btnWaiveFees = function() {
                         $scope.mode = 'waive';
                         $scope.billArgs.charge = 0;
-                        $scope.applyFine = "noapply";
                     }
 
                     $scope.cancel = function ($event) { 
@@ -1351,15 +1352,19 @@ function($uibModal , $q , egCore , egAlertDialog , egConfirmDialog,  egAddCopyAl
                     }
 
                     var handle_mark_item_damaged = function() {
+                        var applyFines;
+                        if ($scope.showBill)
+                            applyFines = $scope.billArgs.charge ? 'apply' : 'noapply';
+
                         egCore.net.request(
                             'open-ils.circ',
                             'open-ils.circ.mark_item_damaged',
                             egCore.auth.token(), params.id, {
-                                apply_fines: $scope.applyFine,
+                                apply_fines: applyFines,
                                 override_amount: $scope.billArgs.charge,
                                 override_btype: $scope.billArgs.type,
                                 override_note: $scope.billArgs.note,
-                                handle_checkin: !$scope.applyFine
+                                handle_checkin: !applyFines
                         }).then(function(resp) {
                             if (evt = egCore.evt.parse(resp)) {
                                 doRefresh = false;
@@ -1708,7 +1713,11 @@ function($uibModal , $q , egCore , egAlertDialog , egConfirmDialog,  egAddCopyAl
                 return service.route_dialog(
                     './circ/share/t_transit_dialog', 
                     evt[0], params, options
-                ).then(function() { return final_resp });
+                ).then(function(data) {
+                    if (transit && data.transit && transit.dest().id() != data.transit.dest().id())
+                        final_resp.evt[0].route_to = data.transit.dest().shortname();
+                    return final_resp;
+                });
 
             case 'ASSET_COPY_NOT_FOUND':
                 egCore.audio.play('error.checkin.not_found');
@@ -1791,7 +1800,7 @@ function($uibModal , $q , egCore , egAlertDialog , egConfirmDialog,  egAddCopyAl
                 // do not show the dialog or print if the
                 // disabled automatic print attempt type list includes
                 // the specified template
-                return;
+                return data;
             }
 
             // All actions flow from the print data
@@ -1840,7 +1849,7 @@ function($uibModal , $q , egCore , egAlertDialog , egConfirmDialog,  egAddCopyAl
                     context : 'default', 
                     template : template, 
                     scope : print_context
-                });
+                }).then(function() { return data });
             }
 
             // when auto-print is on, skip the dialog and go straight
@@ -1870,7 +1879,7 @@ function($uibModal , $q , egCore , egAlertDialog , egConfirmDialog,  egAddCopyAl
                     }
                 }]
 
-            }).result;
+            }).result.then(function() { return data });
         });
     }
 

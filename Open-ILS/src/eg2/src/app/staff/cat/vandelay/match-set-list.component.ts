@@ -6,7 +6,7 @@ import {PcrudService} from '@eg/core/pcrud.service';
 import {OrgService} from '@eg/core/org.service';
 import {AuthService} from '@eg/core/auth.service';
 import {GridComponent} from '@eg/share/grid/grid.component';
-import {GridDataSource, GridColumn} from '@eg/share/grid/grid';
+import {GridDataSource, GridColumn, GridCellTextGenerator} from '@eg/share/grid/grid';
 import {FmRecordEditorComponent} from '@eg/share/fm-editor/fm-editor.component';
 
 @Component({
@@ -20,6 +20,8 @@ export class MatchSetListComponent implements AfterViewInit {
     createNew: () => void;
     @ViewChild('grid', { static: true }) grid: GridComponent;
     @ViewChild('editDialog', { static: true }) editDialog: FmRecordEditorComponent;
+
+    cellTextGenerator: GridCellTextGenerator;
 
     constructor(
         private router: Router,
@@ -37,6 +39,10 @@ export class MatchSetListComponent implements AfterViewInit {
                 limit: pager.limit,
                 offset: pager.offset
             });
+        };
+
+        this.cellTextGenerator = {
+            name: row => row.name()
         };
 
         this.createNew = () => {
