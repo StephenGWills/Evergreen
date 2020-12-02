@@ -91,7 +91,7 @@ function($scope , $q , $window , $location , $timeout , egCore , egNet , egGridD
     }
 
     $scope.show_in_catalog = function() {
-        window.open('/eg/staff/cat/catalog/record/' + $scope.args.recordId + '/catalog', '_blank');
+        window.open('/eg2/staff/catalog/record/' + $scope.args.recordId, '_blank');
     }
 
     $scope.print_labels = function() {
@@ -169,7 +169,7 @@ function($scope , $q , $window , $location , $timeout , egCore , egNet , egGridD
     }
 
     $scope.show_record_holds = function() {
-        window.open('/eg/staff/cat/catalog/record/' + $scope.args.recordId + '/holds', '_blank');
+        window.open('/eg2/staff/catalog/record/' + $scope.args.recordId + '/holds', '_blank');
     }
 
     $scope.add_item_alerts = function() {
@@ -363,6 +363,9 @@ function($scope , $q , $window , $location , $timeout , egCore , egNet , egGridD
     };
 
     $scope.$watch('barcodesFromFile', function(newVal, oldVal) {
+        $scope.context.itemsNotFound = [];
+        $scope.context.fileDoneLoading = false;
+        $scope.context.numBarcodesInFile = 0;
         if (newVal && newVal != oldVal) {
             $scope.args.barcode = '';
             var barcodes = [];
@@ -389,13 +392,20 @@ function($scope , $q , $window , $location , $timeout , egCore , egNet , egGridD
                     if(itemSvc.copies[0]){  // Were any copies actually retrieved
                         copyGrid.selectItems([itemSvc.copies[0].index]);
                     }
+                    $scope.context.fileDoneLoading = true;
                     return;
                 }
 
-                itemSvc.fetch(barcode).then(fetch_next_copy);
+                itemSvc.fetch(barcode).then(function(item) {
+                    if (!item) {
+                        $scope.context.itemsNotFound.push(barcode);
+                    }
+                    fetch_next_copy();
+                })
             }
 
             if (barcodes.length) {
+                $scope.context.numBarcodesInFile = barcodes.length;
                 egProgressDialog.open({value: 0, max: barcodes.length});
                 fetch_next_copy();
             }
@@ -405,17 +415,40 @@ function($scope , $q , $window , $location , $timeout , egCore , egNet , egGridD
     $scope.context.search = function(args) {
         if (!args.barcode) return;
         $scope.context.itemNotFound = false;
-        itemSvc.fetch(args.barcode).then(function(res) {
-            if (res) {
-                copyGrid.refresh();
-                copyGrid.selectItems([res.index]);
-                $scope.args.barcode = '';
-            } else {
-                $scope.context.itemNotFound = true;
-                egCore.audio.play('warning.item_status.itemNotFound');
-            }
-            $scope.context.selectBarcode = true;
-        })
+
+        //check to see if there are multiple barcodes in CSV format
+        var barcodes = [];
+        //split on commas and clean up barcodes
+        angular.forEach(args.barcode.split(/,/), function(line) {
+            //remove all whitespace and commas
+            line = line.replace(/[\s,]+/g,'');
+
+            //Or remove leading/trailing whitespace
+            //line = line.replace(/(^[\s,]+|[\s,]+$/g,'');
+
+            if (!line) return;
+            barcodes.push(line);
+        });
+
+        if(barcodes.length > 1){
+            //convert to newline seperated list and send to barcodesFromFile processor
+            $scope.barcodesFromFile = barcodes.join('\n');
+            //console.log('Barcodes: ',barcodes);
+        }
+        else {
+            //Single Barcode
+            itemSvc.fetch(args.barcode).then(function(res) {
+                if (res) {
+                    copyGrid.refresh();
+                    copyGrid.selectItems([res.index]);
+                    $scope.args.barcode = '';
+                } else {
+                    $scope.context.itemNotFound = true;
+                    egCore.audio.play('warning.item_status.itemNotFound');
+                }
+                $scope.context.selectBarcode = true;
+            })
+        }
     }
 
     var add_barcode_to_list = function (b) {
@@ -646,7 +679,7 @@ function($scope , $q , $window , $location , $timeout , egCore , egNet , egGridD
 
     $scope.showBibHolds = function () {
         angular.forEach(gatherSelectedRecordIds(), function (r) {
-            var url = egCore.env.basePath + 'cat/catalog/record/' + r + '/holds';
+            var url = '/eg2/staff/catalog/record/' + r + '/holds';
             $timeout(function() { $window.open(url, '_blank') });
         });
     }
@@ -744,20 +777,20 @@ function($scope , $q , $window , $location , $timeout , egCore , egNet , egGridD
  * Detail view -- shows one copy
  */
 .controller('ViewCtrl', 
-       ['$scope','$q','$location','$routeParams','$timeout','$window','egCore','egItem','egBilling','egCirc',
-function($scope , $q , $location , $routeParams , $timeout , $window , egCore , itemSvc , egBilling , egCirc) {
+       ['$scope','$q','egGridDataProvider','$location','$routeParams','$timeout','$window','egCore','egItem','egBilling','egCirc',
+function($scope , $q , egGridDataProvider , $location , $routeParams , $timeout , $window , egCore , itemSvc , egBilling , egCirc) {
     var copyId = $routeParams.id;
     $scope.args.copyId = copyId;
     $scope.tab = $routeParams.tab || 'summary';
     $scope.context.page = 'detail';
     $scope.summaryRecord = null;
-
+    $scope.courseModulesOptIn = fetchCourseOptIn();
+    $scope.has_course_perms = fetchCoursePerms();
     $scope.edit = false;
     if ($scope.tab == 'edit') {
         $scope.tab = 'summary';
         $scope.edit = true;
     }
-
 
     // use the cached record info
     if (itemSvc.copy) {
@@ -965,6 +998,27 @@ console.debug($scope.copy_alert_count);
         });
     }
 
+    // Check for Course Modules Opt-In to enable Course Info tab
+    function fetchCourseOptIn() {
+        return egCore.org.settings(
+            'circ.course_materials_opt_in'
+        ).then(function(set) {
+            $scope.courseModulesOptIn = set['circ.course_materials_opt_in'];
+
+            return $scope.courseModulesOptIn;
+        });
+    }
+
+    function fetchCoursePerms() {
+        return egCore.perm.hasPermAt('MANAGE RESERVES', true).then(function(orgIds) {
+            if(orgIds.indexOf(egCore.auth.user().ws_ou()) != -1){
+                $scope.has_course_perms = true;
+
+                return $scope.has_course_perms;
+            }
+        });
+    }
+
     $scope.addBilling = function(circ) {
         egBilling.showBillDialog({
             xact_id : circ.id(),
@@ -1139,6 +1193,47 @@ console.debug($scope.copy_alert_count);
         })
     }
 
+    function loadCourseInfo() {
+        delete $scope.courses;
+        delete $scope.instructors;
+        delete $scope.course_ids;
+        delete $scope.instructors_exist;
+        if (!copyId) return;
+        $scope.course_ids = [];
+        $scope.courses = [];
+        $scope.instructors = {};
+
+        egCore.pcrud.search('acmcm', {
+            item: copyId
+        }, {
+            flesh: 3,
+            flesh_fields: {
+                acmcm: ['course']
+            }, order_by: {acmc : 'id desc'}
+        }).then(null, null, function(material) {
+            
+            $scope.courses.push(material.course());
+            egCore.net.request(
+                'open-ils.circ',
+                'open-ils.circ.course_users.retrieve',
+                material.course().id()
+            ).then(null, null, function(instructors) {
+                angular.forEach(instructors, function(instructor) {
+                    var patron_id = instructor.patron_id.toString();
+                    if (!$scope.instructors[patron_id]) {
+                        $scope.instructors[patron_id] = instructor;
+                        $scope.instructors_exist = true;
+                        $scope.instructors[patron_id]._linked_course = [];
+                    }
+                    $scope.instructors[patron_id]._linked_course.push({
+                        role: instructor.usr_role,
+                        course: material.course().name()
+                    });
+                });
+            });
+        });
+    }
+
 
     // we don't need all data on all tabs, so fetch what's needed when needed.
     function loadTabData() {
@@ -1159,6 +1254,10 @@ console.debug($scope.copy_alert_count);
             case 'holds':
                 loadHolds()
                 loadMostRecentTransit();
+                break;
+
+            case 'course':
+                loadCourseInfo();
                 break;
 
             case 'triggered_events':

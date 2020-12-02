@@ -25,10 +25,12 @@ CREATE TABLE action.in_house_use (
 	id		SERIAL				PRIMARY KEY,
 	item		BIGINT				NOT NULL, -- REFERENCES asset.copy (id) DEFERRABLE INITIALLY DEFERRED, -- XXX could be an serial.issuance
 	staff		INT				NOT NULL REFERENCES actor.usr (id) DEFERRABLE INITIALLY DEFERRED,
+	workstation INT				REFERENCES actor.workstation (id) DEFERRABLE INITIALLY DEFERRED,
 	org_unit	INT				NOT NULL REFERENCES actor.org_unit (id) DEFERRABLE INITIALLY DEFERRED,
 	use_time	TIMESTAMP WITH TIME ZONE	NOT NULL DEFAULT NOW()
 );
 CREATE INDEX action_in_house_use_staff_idx      ON action.in_house_use ( staff );
+CREATE INDEX action_in_house_use_ws_idx ON action.in_house_use ( workstation );
 
 CREATE TABLE action.non_cataloged_circulation (
 	id		SERIAL				PRIMARY KEY,
@@ -45,10 +47,12 @@ CREATE TABLE action.non_cat_in_house_use (
 	id		SERIAL				PRIMARY KEY,
 	item_type	BIGINT				NOT NULL REFERENCES config.non_cataloged_type(id) DEFERRABLE INITIALLY DEFERRED,
 	staff		INT				NOT NULL REFERENCES actor.usr (id) DEFERRABLE INITIALLY DEFERRED,
+	workstation INT				REFERENCES actor.workstation (id) DEFERRABLE INITIALLY DEFERRED,
 	org_unit	INT				NOT NULL REFERENCES actor.org_unit (id) DEFERRABLE INITIALLY DEFERRED,
 	use_time	TIMESTAMP WITH TIME ZONE	NOT NULL DEFAULT NOW()
 );
 CREATE INDEX non_cat_in_house_use_staff_idx ON action.non_cat_in_house_use ( staff );
+CREATE INDEX non_cat_in_house_use_ws_idx ON action.non_cat_in_house_use ( workstation );
 
 CREATE TABLE action.survey (
 	id		SERIAL				PRIMARY KEY,
@@ -314,7 +318,6 @@ UNION ALL
 ;
 
 
-
 CREATE OR REPLACE FUNCTION action.age_circ_on_delete () RETURNS TRIGGER AS $$
 DECLARE
 found char := 'N';
@@ -354,14 +357,12 @@ BEGIN
 
     -- Migrate billings and payments to aged tables
 
-    INSERT INTO money.aged_billing
-        SELECT * FROM money.billing WHERE xact = OLD.id;
+    SELECT 'Y' INTO found FROM config.global_flag 
+        WHERE name = 'history.money.age_with_circs' AND enabled;
 
-    INSERT INTO money.aged_payment 
-        SELECT * FROM money.payment_view WHERE xact = OLD.id;
-
-    DELETE FROM money.payment WHERE xact = OLD.id;
-    DELETE FROM money.billing WHERE xact = OLD.id;
+    IF found = 'Y' THEN
+        PERFORM money.age_billings_and_payments_for_xact(OLD.id);
+    END IF;
 
     RETURN OLD;
 END;
@@ -468,7 +469,8 @@ CREATE TABLE action.hold_request (
 	mint_condition  BOOL NOT NULL DEFAULT TRUE,
 	shelf_expire_time TIMESTAMPTZ,
 	current_shelf_lib INT REFERENCES actor.org_unit DEFERRABLE INITIALLY DEFERRED,
-    behind_desk BOOLEAN NOT NULL DEFAULT FALSE
+    behind_desk BOOLEAN NOT NULL DEFAULT FALSE,
+	hopeless_date		TIMESTAMP WITH TIME ZONE
 );
 ALTER TABLE action.hold_request ADD CONSTRAINT sms_check CHECK (
     sms_notify IS NULL
@@ -551,7 +553,7 @@ CREATE OR REPLACE FUNCTION
     action.hold_request_regen_copy_maps(
         hold_id INTEGER, copy_ids INTEGER[]) RETURNS VOID AS $$
     DELETE FROM action.hold_copy_map WHERE hold = $1;
-    INSERT INTO action.hold_copy_map (hold, target_copy) SELECT $1, UNNEST($2);
+    INSERT INTO action.hold_copy_map (hold, target_copy) SELECT DISTINCT $1, UNNEST($2);
 $$ LANGUAGE SQL;
 
 CREATE TABLE action.transit_copy (
@@ -1476,53 +1478,31 @@ query-based fieldsets.
 Returns NULL if successful, or an error message if not.
 $$;
 
-CREATE OR REPLACE FUNCTION action.hold_copy_calculated_proximity(
-    ahr_id INT,
-    acp_id BIGINT,
-    copy_context_ou INT DEFAULT NULL
-    -- TODO maybe? hold_context_ou INT DEFAULT NULL.  This would optionally
-    -- support an "ahprox" measurement: adjust prox between copy circ lib and
-    -- hold request lib, but I'm unsure whether to use this theoretical
-    -- argument only in the baseline calculation or later in the other
-    -- queries in this function.
+CREATE OR REPLACE FUNCTION action.copy_calculated_proximity(
+    pickup  INT,
+    request INT,
+    vacp_cl  INT,
+    vacp_cm  TEXT,
+    vacn_ol  INT,
+    vacl_ol  INT
 ) RETURNS NUMERIC AS $f$
 DECLARE
-    aoupa           actor.org_unit_proximity_adjustment%ROWTYPE;
-    ahr             action.hold_request%ROWTYPE;
-    acp             asset.copy%ROWTYPE;
-    acn             asset.call_number%ROWTYPE;
-    acl             asset.copy_location%ROWTYPE;
     baseline_prox   NUMERIC;
-
-    icl_list        INT[];
-    iol_list        INT[];
-    isl_list        INT[];
-    hpl_list        INT[];
-    hrl_list        INT[];
-
+    aoupa           actor.org_unit_proximity_adjustment%ROWTYPE;
 BEGIN
 
-    SELECT * INTO ahr FROM action.hold_request WHERE id = ahr_id;
-    SELECT * INTO acp FROM asset.copy WHERE id = acp_id;
-    SELECT * INTO acn FROM asset.call_number WHERE id = acp.call_number;
-    SELECT * INTO acl FROM asset.copy_location WHERE id = acp.location;
-
-    IF copy_context_ou IS NULL THEN
-        copy_context_ou := acp.circ_lib;
-    END IF;
-
     -- First, gather the baseline proximity of "here" to pickup lib
-    SELECT prox INTO baseline_prox FROM actor.org_unit_proximity WHERE from_org = copy_context_ou AND to_org = ahr.pickup_lib;
+    SELECT prox INTO baseline_prox FROM actor.org_unit_proximity WHERE from_org = vacp_cl AND to_org = pickup;
 
     -- Find any absolute adjustments, and set the baseline prox to that
     SELECT  adj.* INTO aoupa
       FROM  actor.org_unit_proximity_adjustment adj
-            LEFT JOIN actor.org_unit_ancestors_distance(copy_context_ou) acp_cl ON (acp_cl.id = adj.item_circ_lib)
-            LEFT JOIN actor.org_unit_ancestors_distance(acn.owning_lib) acn_ol ON (acn_ol.id = adj.item_owning_lib)
-            LEFT JOIN actor.org_unit_ancestors_distance(acl.owning_lib) acl_ol ON (acl_ol.id = adj.copy_location)
-            LEFT JOIN actor.org_unit_ancestors_distance(ahr.pickup_lib) ahr_pl ON (ahr_pl.id = adj.hold_pickup_lib)
-            LEFT JOIN actor.org_unit_ancestors_distance(ahr.request_lib) ahr_rl ON (ahr_rl.id = adj.hold_request_lib)
-      WHERE (adj.circ_mod IS NULL OR adj.circ_mod = acp.circ_modifier) AND
+            LEFT JOIN actor.org_unit_ancestors_distance(vacp_cl) acp_cl ON (acp_cl.id = adj.item_circ_lib)
+            LEFT JOIN actor.org_unit_ancestors_distance(vacn_ol) acn_ol ON (acn_ol.id = adj.item_owning_lib)
+            LEFT JOIN actor.org_unit_ancestors_distance(vacl_ol) acl_ol ON (acl_ol.id = adj.copy_location)
+            LEFT JOIN actor.org_unit_ancestors_distance(pickup) ahr_pl ON (ahr_pl.id = adj.hold_pickup_lib)
+            LEFT JOIN actor.org_unit_ancestors_distance(request) ahr_rl ON (ahr_rl.id = adj.hold_request_lib)
+      WHERE (adj.circ_mod IS NULL OR adj.circ_mod = vacp_cm) AND
             (adj.item_circ_lib IS NULL OR adj.item_circ_lib = acp_cl.id) AND
             (adj.item_owning_lib IS NULL OR adj.item_owning_lib = acn_ol.id) AND
             (adj.copy_location IS NULL OR adj.copy_location = acl_ol.id) AND
@@ -1545,14 +1525,14 @@ BEGIN
 
     -- Now find any relative adjustments, and change the baseline prox based on them
     FOR aoupa IN
-        SELECT  adj.* 
+        SELECT  adj.*
           FROM  actor.org_unit_proximity_adjustment adj
-                LEFT JOIN actor.org_unit_ancestors_distance(copy_context_ou) acp_cl ON (acp_cl.id = adj.item_circ_lib)
-                LEFT JOIN actor.org_unit_ancestors_distance(acn.owning_lib) acn_ol ON (acn_ol.id = adj.item_owning_lib)
-                LEFT JOIN actor.org_unit_ancestors_distance(acl.owning_lib) acl_ol ON (acn_ol.id = adj.copy_location)
-                LEFT JOIN actor.org_unit_ancestors_distance(ahr.pickup_lib) ahr_pl ON (ahr_pl.id = adj.hold_pickup_lib)
-                LEFT JOIN actor.org_unit_ancestors_distance(ahr.request_lib) ahr_rl ON (ahr_rl.id = adj.hold_request_lib)
-          WHERE (adj.circ_mod IS NULL OR adj.circ_mod = acp.circ_modifier) AND
+                LEFT JOIN actor.org_unit_ancestors_distance(vacp_cl) acp_cl ON (acp_cl.id = adj.item_circ_lib)
+                LEFT JOIN actor.org_unit_ancestors_distance(vacn_ol) acn_ol ON (acn_ol.id = adj.item_owning_lib)
+                LEFT JOIN actor.org_unit_ancestors_distance(vacl_ol) acl_ol ON (acn_ol.id = adj.copy_location)
+                LEFT JOIN actor.org_unit_ancestors_distance(pickup) ahr_pl ON (ahr_pl.id = adj.hold_pickup_lib)
+                LEFT JOIN actor.org_unit_ancestors_distance(request) ahr_rl ON (ahr_rl.id = adj.hold_request_lib)
+          WHERE (adj.circ_mod IS NULL OR adj.circ_mod = vacp_cm) AND
                 (adj.item_circ_lib IS NULL OR adj.item_circ_lib = acp_cl.id) AND
                 (adj.item_owning_lib IS NULL OR adj.item_owning_lib = acn_ol.id) AND
                 (adj.copy_location IS NULL OR adj.copy_location = acl_ol.id) AND
@@ -1565,6 +1545,47 @@ BEGIN
     END LOOP;
 
     RETURN baseline_prox;
+END;
+$f$ LANGUAGE PLPGSQL;
+
+CREATE OR REPLACE FUNCTION action.hold_copy_calculated_proximity(
+    ahr_id INT,
+    acp_id BIGINT,
+    copy_context_ou INT DEFAULT NULL
+    -- TODO maybe? hold_context_ou INT DEFAULT NULL.  This would optionally
+    -- support an "ahprox" measurement: adjust prox between copy circ lib and
+    -- hold request lib, but I'm unsure whether to use this theoretical
+    -- argument only in the baseline calculation or later in the other
+    -- queries in this function.
+) RETURNS NUMERIC AS $f$
+DECLARE
+    ahr  action.hold_request%ROWTYPE;
+    acp  asset.copy%ROWTYPE;
+    acn  asset.call_number%ROWTYPE;
+    acl  asset.copy_location%ROWTYPE;
+
+    prox NUMERIC;
+BEGIN
+
+    SELECT * INTO ahr FROM action.hold_request WHERE id = ahr_id;
+    SELECT * INTO acp FROM asset.copy WHERE id = acp_id;
+    SELECT * INTO acn FROM asset.call_number WHERE id = acp.call_number;
+    SELECT * INTO acl FROM asset.copy_location WHERE id = acp.location;
+
+    IF copy_context_ou IS NULL THEN
+        copy_context_ou := acp.circ_lib;
+    END IF;
+
+    SELECT action.copy_calculated_proximity(
+        ahr.pickup_lib,
+        ahr.request_lib,
+        copy_context_ou,
+        acp.circ_modifier,
+        acn.owning_lib,
+        acl.owning_lib
+    ) INTO prox;
+
+    RETURN prox;
 END;
 $f$ LANGUAGE PLPGSQL;
 
@@ -1712,7 +1733,7 @@ UNION ALL
     ancihu.staff AS circ_staff,
     ancihu.use_time AS create_time,
     cnct_ancihu.name AS item_type,
-    'non-cat_circ'::text AS circ_type
+    'non-cat-in-house_use'::text AS circ_type
    FROM action.non_cat_in_house_use ancihu,
     config.non_cataloged_type cnct_ancihu
   WHERE ancihu.item_type = cnct_ancihu.id
@@ -1727,6 +1748,19 @@ UNION ALL
    FROM action.aged_circulation aacirc,
     asset.copy ac_aacirc
   WHERE aacirc.target_copy = ac_aacirc.id;
+
+CREATE TABLE action.curbside (
+    id          SERIAL      PRIMARY KEY,
+    patron      INT         NOT NULL REFERENCES actor.usr (id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED,
+    org         INT         NOT NULL REFERENCES actor.org_unit (id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED,
+    slot        TIMESTAMPTZ,
+    staged      TIMESTAMPTZ,
+    stage_staff     INT     REFERENCES actor.usr (id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED,
+    arrival     TIMESTAMPTZ,
+    delivered   TIMESTAMPTZ,
+    delivery_staff  INT     REFERENCES actor.usr (id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED,
+    notes       TEXT
+);
 
 COMMIT;
 

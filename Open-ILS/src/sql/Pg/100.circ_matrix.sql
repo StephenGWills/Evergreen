@@ -38,8 +38,9 @@ INSERT INTO config.circ_modifier (code, name, description, sip2_media_type )
 
 */
 
--- add an fkey pointing to the new circ mod table
+-- add fkeys pointing to the new circ mod table
 ALTER TABLE asset.copy ADD CONSTRAINT circ_mod_fkey FOREIGN KEY (circ_modifier) REFERENCES config.circ_modifier (code) ON UPDATE CASCADE ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED;
+ALTER TABLE asset.course_module_course_materials ADD CONSTRAINT original_circ_mod_fkey FOREIGN KEY (original_circ_modifier) REFERENCES config.circ_modifier (code) ON UPDATE CASCADE ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED;
 
 
 /**
@@ -619,6 +620,7 @@ BEGIN
                   WHERE circ.usr = match_user
                     AND circ.circ_lib IN (SELECT * FROM unnest(context_org_list))
                     AND circ.checkin_time IS NULL
+                    AND circ.xact_finish IS NULL
                     AND (circ.stop_fines IN ('MAXFINES','LONGOVERDUE') OR circ.stop_fines IS NULL)
                     AND (copy.circ_modifier IN (SELECT circ_mod FROM config.circ_limit_set_circ_mod_map WHERE limit_set = circ_limit_set.id)
                         OR copy.location IN (SELECT copy_loc FROM config.circ_limit_set_copy_loc_map WHERE limit_set = circ_limit_set.id)

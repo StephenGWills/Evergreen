@@ -92,7 +92,7 @@ CREATE TRIGGER no_overlapping_deps
     BEFORE INSERT OR UPDATE ON config.db_patch_dependencies
     FOR EACH ROW EXECUTE PROCEDURE evergreen.array_overlap_check ('deprecates');
 
-INSERT INTO config.upgrade_log (version, applied_to) VALUES ('1199', :eg_version); -- Bmagic/csharp
+INSERT INTO config.upgrade_log (version, applied_to) VALUES ('1242', :eg_version); -- remingtron/terranm
 
 CREATE TABLE config.bib_source (
 	id		SERIAL	PRIMARY KEY,
@@ -442,7 +442,8 @@ CREATE TABLE config.copy_status (
 	opac_visible	BOOL	NOT NULL DEFAULT FALSE,
     copy_active  BOOL    NOT NULL DEFAULT FALSE,
 	restrict_copy_delete BOOL	  NOT NULL DEFAULT FALSE,
-    is_available  BOOL    NOT NULL DEFAULT FALSE
+    is_available  BOOL    NOT NULL DEFAULT FALSE,
+    hopeless_prone  BOOL    NOT NULL DEFAULT FALSE
 );
 COMMENT ON TABLE config.copy_status IS $$
 Copy Statuses
@@ -1140,6 +1141,7 @@ CREATE TABLE config.best_hold_order(
     name        TEXT        UNIQUE,   -- i18n
     pprox       INT, -- copy capture <-> pickup lib prox
     hprox       INT, -- copy circ lib <-> request lib prox
+    owning_lib_to_home_lib_prox      INT, -- copy owning lib <-> user home lib prox
     aprox       INT, -- copy circ lib <-> pickup lib ADJUSTED prox on ahcm
     approx      INT, -- copy capture <-> pickup lib ADJUSTED prox from function
     priority    INT, -- group hold priority
@@ -1154,6 +1156,7 @@ CREATE TABLE config.best_hold_order(
 ALTER TABLE config.best_hold_order ADD CHECK ((
     pprox IS NOT NULL OR
     hprox IS NOT NULL OR
+    owning_lib_to_home_lib_prox IS NOT NULL OR
     aprox IS NOT NULL OR
     priority IS NOT NULL OR
     cut IS NOT NULL OR

@@ -1105,5 +1105,55 @@ CREATE VIEW asset.active_copy_alert AS
       FROM  asset.copy_alert
       WHERE ack_time IS NULL;
 
+CREATE TABLE asset.course_module_course (
+    id              SERIAL PRIMARY KEY,
+    name            TEXT NOT NULL,
+    course_number   TEXT NOT NULL,
+    section_number  TEXT,
+    owning_lib      INT REFERENCES actor.org_unit (id),
+    is_archived        BOOLEAN DEFAULT false
+);
+
+CREATE TABLE asset.course_module_role (
+    id              SERIAL  PRIMARY KEY,
+    name            TEXT    UNIQUE NOT NULL,
+    is_public       BOOLEAN NOT NULL DEFAULT false
+);
+
+CREATE TABLE asset.course_module_course_users (
+    id              SERIAL PRIMARY KEY,
+    course          INT NOT NULL REFERENCES asset.course_module_course (id),
+    usr             INT NOT NULL REFERENCES actor.usr (id),
+    usr_role        INT REFERENCES asset.course_module_role (id) ON UPDATE CASCADE ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED
+);
+
+CREATE TABLE asset.course_module_course_materials (
+    id              SERIAL PRIMARY KEY,
+    course          INT NOT NULL REFERENCES asset.course_module_course (id),
+    item            INT REFERENCES asset.copy (id),
+    relationship    TEXT,
+    record          INT REFERENCES biblio.record_entry (id),
+    temporary_record       BOOLEAN,
+    original_location      INT REFERENCES asset.copy_location,
+    original_status        INT REFERENCES config.copy_status,
+    original_circ_modifier TEXT, --REFERENCES config.circ_modifier
+    original_callnumber    INT REFERENCES asset.call_number,
+    unique (course, item, record)
+);
+
+CREATE TABLE asset.course_module_term (
+    id              SERIAL  PRIMARY KEY,
+    name            TEXT    UNIQUE NOT NULL,
+    owning_lib      INT REFERENCES actor.org_unit (id),
+	start_date      TIMESTAMP WITH TIME ZONE,
+	end_date        TIMESTAMP WITH TIME ZONE
+);
+
+CREATE TABLE asset.course_module_term_course_map (
+    id              BIGSERIAL  PRIMARY KEY,
+    term            INT     NOT NULL REFERENCES asset.course_module_term (id) ON UPDATE CASCADE ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED,
+    course          INT     NOT NULL REFERENCES asset.course_module_course (id) ON UPDATE CASCADE ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED
+);
+
 COMMIT;
 

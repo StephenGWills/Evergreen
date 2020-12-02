@@ -12,6 +12,7 @@ use OpenSRF::Utils::Logger qw/$logger/;
 use OpenILS::Application::AppUtils;
 use OpenILS::Utils::CStoreEditor qw/:funcs/;
 use OpenILS::Utils::Fieldmapper;
+use OpenSRF::Utils::Cache;
 use DateTime::Format::ISO8601;
 use CGI qw(:all -utf8);
 use Time::HiRes;
@@ -23,6 +24,7 @@ use OpenILS::WWW::EGCatLoader::Browse;
 use OpenILS::WWW::EGCatLoader::Library;
 use OpenILS::WWW::EGCatLoader::Search;
 use OpenILS::WWW::EGCatLoader::Record;
+use OpenILS::WWW::EGCatLoader::Course;
 use OpenILS::WWW::EGCatLoader::Container;
 use OpenILS::WWW::EGCatLoader::SMS;
 use OpenILS::WWW::EGCatLoader::Register;
@@ -133,6 +135,9 @@ sub load {
         $path =~ /opac\/my(opac\/lists|list)/ ||
         $path =~ m!opac/api/mylist!;
 
+    my $org_unit = $self->ctx->{physical_loc} || $self->cgi->param('context_org') || $self->_get_search_lib;
+    $self->ctx->{selected_print_email_loc} = $org_unit;
+
     return $self->load_api_mylist_retrieve if $path =~ m|opac/api/mylist/retrieve|;
     return $self->load_api_mylist_add if $path =~ m|opac/api/mylist/add|;
     return $self->load_api_mylist_delete if $path =~ m|opac/api/mylist/delete|;
@@ -140,15 +145,20 @@ sub load {
 
     return $self->load_simple("home") if $path =~ m|opac/home|;
     return $self->load_simple("css") if $path =~ m|opac/css|;
+    return $self->load_cresults if $path =~ m|opac/course/results|;
+    return $self->load_simple("course_search") if $path =~ m|opac/course_search|;
     return $self->load_simple("advanced") if
         $path =~ m:opac/(advanced|numeric|expert):;
 
     return $self->load_library if $path =~ m|opac/library|;
     return $self->load_rresults if $path =~ m|opac/results|;
+    return $self->load_print_or_email_preview('print') if $path =~ m|opac/record/print_preview|;
     return $self->load_print_record if $path =~ m|opac/record/print|;
     return $self->load_record if $path =~ m|opac/record/\d|;
     return $self->load_cnbrowse if $path =~ m|opac/cnbrowse|;
     return $self->load_browse if $path =~ m|opac/browse|;
+    return $self->load_course_browse if $path =~ m|opac/course_browse|;
+    return $self->load_course if $path =~ m|opac/course|;
 
     return $self->load_mylist_add if $path =~ m|opac/mylist/add|;
     return $self->load_mylist_delete if $path =~ m|opac/mylist/delete|;
@@ -184,9 +194,34 @@ sub load {
     }
 
     if ($path =~ m|opac/sms_cn| and !$self->editor->requestor) {
-        my $org_unit = $self->ctx->{physical_loc} || $self->cgi->param('loc') || $self->ctx->{aou_tree}->()->id;
         my $skip_sms_auth = $self->ctx->{get_org_setting}->($org_unit, 'sms.disable_authentication_requirement.callnumbers');
         return $self->load_sms_cn if $skip_sms_auth;
+    }
+
+    if (!$self->editor->requestor && $path =~ m|opac/record/email|) {
+        if ($self->ctx->{get_org_setting}->($org_unit, 'opac.email_record.allow_without_login')) {
+            my $cache = OpenSRF::Utils::Cache->new('global');
+
+            if ($path !~ m|preview|) { # the real thing!
+                $logger->info("not preview");
+                my $cap_key = $self->ctx->{cap}->{key} = $self->cgi->param('capkey');
+                $logger->info("got cap_key $cap_key");
+                if ($cap_key) {
+                    my $cap_answer = $self->ctx->{cap_answer} = $self->cgi->param('capanswer');
+                    my $real_answer = $self->ctx->{real_answer} = $cache->get_cache(md5_hex($cap_key));
+                    $logger->info("got answers $cap_answer $real_answer");
+                    return $self->load_email_record(1) if ( $cap_answer eq $real_answer );
+                }
+            }
+
+            my $captcha = {};
+            $$captcha{key} = time() . $$ . rand();
+            $$captcha{left} = int(rand(10));
+            $$captcha{right} = int(rand(10));
+            $cache->put_cache(md5_hex($$captcha{key}), $$captcha{left} + $$captcha{right});
+            $self->ctx->{captcha} = $captcha;
+            return $self->load_print_or_email_preview('email', 1) if $path =~ m|opac/record/email_preview|;
+        }
     }
 
     # ----------------------------------------------------------------
@@ -202,10 +237,17 @@ sub load {
         (undef, $self->ctx->{mylist}) = $self->fetch_mylist;
     }
     $self->load_simple("mylist/email") if $path =~ m|opac/mylist/email|;
+    return $self->load_print_or_email_preview('email') if $path =~ m|opac/mylist/doemail_preview|;
     return $self->load_mylist_email if $path =~ m|opac/mylist/doemail|;
+    return $self->load_print_or_email_preview('email') if $path =~ m|opac/record/email_preview|;
     return $self->load_email_record if $path =~ m|opac/record/email|;
+    return $self->load_sms_cn if $path =~ m|opac/sms_cn|;
 
     return $self->load_place_hold if $path =~ m|opac/place_hold|;
+ 
+    # centralize check for curbside tab display
+    $self->load_current_curbside_libs;
+
     return $self->load_myopac_holds if $path =~ m|opac/myopac/holds|;
     return $self->load_myopac_circs if $path =~ m|opac/myopac/circs|;
     return $self->load_myopac_messages if $path =~ m|opac/myopac/messages|;
@@ -213,6 +255,7 @@ sub load {
     return $self->load_myopac_payments if $path =~ m|opac/myopac/main_payments|;
     return $self->load_myopac_pay_init if $path =~ m|opac/myopac/main_pay_init|;
     return $self->load_myopac_pay if $path =~ m|opac/myopac/main_pay|;
+    return $self->load_myopac_main if $path =~ m|opac/myopac/charges|;
     return $self->load_myopac_main if $path =~ m|opac/myopac/main|;
     return $self->load_myopac_receipt_email if $path =~ m|opac/myopac/receipt_email|;
     return $self->load_myopac_receipt_print if $path =~ m|opac/myopac/receipt_print|;
@@ -231,7 +274,6 @@ sub load {
     return $self->load_myopac_prefs_my_lists if $path =~ m|opac/myopac/prefs_my_lists|;
     return $self->load_myopac_prefs if $path =~ m|opac/myopac/prefs|;
     return $self->load_myopac_reservations if $path =~ m|opac/myopac/reservations|;
-    return $self->load_sms_cn if $path =~ m|opac/sms_cn|;
 
     return Apache2::Const::OK;
 }
@@ -307,6 +349,7 @@ sub load_common {
         $ctx->{hostname} = 'remote';
     }
 
+    $ctx->{carousel_loc} = $self->get_carousel_loc;
     $ctx->{physical_loc} = $self->get_physical_loc;
 
     # capture some commonly accessed pages
@@ -361,7 +404,7 @@ sub load_common {
 
     # FIXME - move carousel helpers to a separate file
     $ctx->{get_visible_carousels} = sub {
-        my $org_unit = $self->ctx->{physical_loc} || $self->cgi->param('loc') || $self->ctx->{aou_tree}->()->id;
+        my $org_unit = $self->ctx->{carousel_loc} || $self->ctx->{physical_loc} || $self->cgi->param('loc') || $self->ctx->{aou_tree}->()->id;
         return $U->simplereq(
             'open-ils.actor',
             'open-ils.actor.carousel.retrieve_by_org',
@@ -483,6 +526,11 @@ sub get_physical_loc {
     }
 
     return $self->cgi->cookie(COOKIE_PHYSICAL_LOC);
+}
+
+sub get_carousel_loc {
+    my $self = shift;
+    return $self->cgi->param('carousel_loc') || $ENV{carousel_loc};
 }
 
 # -----------------------------------------------------------------------------

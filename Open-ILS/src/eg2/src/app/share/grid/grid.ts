@@ -39,6 +39,7 @@ export class GridColumn {
     isFiltered: boolean;
     isMultiSortable: boolean;
     disableTooltip: boolean;
+    asyncSupportsEmptyTermClick: boolean;
     comparator: (valueA: any, valueB: any) => number;
 
     // True if the column was automatically generated.
@@ -504,6 +505,7 @@ export class GridContext {
     cellClassCallback: (row: any, col: GridColumn) => string;
     defaultVisibleFields: string[];
     defaultHiddenFields: string[];
+    ignoredFields: string[];
     overflowCells: boolean;
     disablePaging: boolean;
     showDeclaredFieldsOnly: boolean;
@@ -569,7 +571,7 @@ export class GridContext {
             let columns = [];
             if (conf) {
                 columns = conf.columns;
-                if (conf.limit) {
+                if (conf.limit && !this.disablePaging) {
                     this.pager.limit = conf.limit;
                 }
             }
@@ -1078,20 +1080,22 @@ export class GridContext {
         this.idl.classes[this.columnSet.idlClass].fields
         .filter(field => !field.virtual)
         .forEach(field => {
-            const col = new GridColumn();
-            col.name = field.name;
-            col.label = field.label || field.name;
-            col.idlFieldDef = field;
-            col.idlClass = this.columnSet.idlClass;
-            col.datatype = field.datatype;
-            col.isIndex = (field.name === pkeyField);
-            col.isAuto = true;
+            if (!this.ignoredFields.filter(ignored => ignored === field.name).length) {
+                const col = new GridColumn();
+                col.name = field.name;
+                col.label = field.label || field.name;
+                col.idlFieldDef = field;
+                col.idlClass = this.columnSet.idlClass;
+                col.datatype = field.datatype;
+                col.isIndex = (field.name === pkeyField);
+                col.isAuto = true;
 
-            if (this.showDeclaredFieldsOnly) {
-                col.hidden = true;
+                if (this.showDeclaredFieldsOnly) {
+                    col.hidden = true;
+                }
+
+                this.columnSet.add(col);
             }
-
-            this.columnSet.add(col);
         });
     }
 
@@ -1153,6 +1157,7 @@ export class GridDataSource {
     filters: Object;
     allRowsRetrieved: boolean;
     requestingData: boolean;
+    retrievalError: boolean;
     getRows: (pager: Pager, sort: any[]) => Observable<any>;
 
     constructor() {
@@ -1191,21 +1196,27 @@ export class GridDataSource {
 
         // If we have to call out for data, set inFetch
         this.requestingData = true;
+        this.retrievalError = false;
 
         return new Promise((resolve, reject) => {
             let idx = pager.offset;
             return this.getRows(pager, this.sort).subscribe(
                 row => {
                     this.data[idx++] = row;
-                    this.requestingData = false;
+                    // not updating this.requestingData, as having
+                    // retrieved one row doesn't mean we're done
+                    this.retrievalError = false;
                 },
                 err => {
                     console.error(`grid getRows() error ${err}`);
+                    this.requestingData = false;
+                    this.retrievalError = true;
                     reject(err);
                 },
                 ()  => {
                     this.checkAllRetrieved(pager, idx);
                     this.requestingData = false;
+                    this.retrievalError = false;
                     resolve();
                 }
             );

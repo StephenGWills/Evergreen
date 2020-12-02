@@ -656,6 +656,17 @@ angular.module('egCoreMod')
         });
     }
 
+    service.send_test_message = function(user_id, hook) {
+
+        return egCore.net.request(
+            'open-ils.actor',
+            'open-ils.actor.event.test_notification',
+            egCore.auth.token(), {hook: hook, target: user_id}
+        ).then(function(res) {
+            return res;
+        });
+    }
+
     service.dupe_patron_search = function(patron, type, value) {
         var search;
 
@@ -804,6 +815,7 @@ angular.module('egCoreMod')
 
         // toss entries for existing stat cat maps into our living 
         // stat cat entry map, which is modified within the template.
+        service.stat_cat_entry_maps = [];
         angular.forEach(patron.stat_cat_entries, function(map) {
             service.stat_cat_entry_maps[map.stat_cat.id] = map.stat_cat_entry;
         });
@@ -1251,10 +1263,10 @@ angular.module('egCoreMod')
 .controller('PatronRegCtrl',
        ['$scope','$routeParams','$q','$uibModal','$window','egCore',
         'patronSvc','patronRegSvc','egUnloadPrompt','egAlertDialog',
-        'egWorkLog', '$timeout',
+        'egWorkLog', '$timeout','ngToast',
 function($scope , $routeParams , $q , $uibModal , $window , egCore ,
          patronSvc , patronRegSvc , egUnloadPrompt, egAlertDialog ,
-         egWorkLog, $timeout) {
+         egWorkLog, $timeout, ngToast) {
 
     $scope.page_data_loaded = false;
     $scope.hold_notify_type = { phone : null, email : null, sms : null };
@@ -1293,11 +1305,23 @@ function($scope , $routeParams , $q , $uibModal , $window , egCore ,
     function set_new_patron_defaults(prs) {
         if (!$scope.patron.passwd) {
             // passsword may originate from staged user.
-            $scope.generate_password();
+            if ($scope.patron.day_phone &&
+                $scope.org_settings['patron.password.use_phone']) {
+                $scope.patron.passwd = $scope.patron.day_phone.substr(-4);
+            } else {
+                $scope.generate_password();
+            }
         }
-        $scope.hold_notify_type.phone = true;
-        $scope.hold_notify_type.email = true;
-        $scope.hold_notify_type.sms = false;
+
+        var notify = 'phone:email'; // hard-coded default when opac.hold_notify has no reg_default
+        var notify_stype = $scope.user_setting_types['opac.hold_notify'];
+        if (notify_stype && notify_stype.reg_default() !== undefined && notify_stype.reg_default() !== null) {
+            console.log('using default opac.hold_notify');
+            notify = notify_stype.reg_default();
+        }
+        $scope.hold_notify_type.phone = Boolean(notify.match(/phone/));
+        $scope.hold_notify_type.email = Boolean(notify.match(/email/));
+        $scope.hold_notify_type.sms = Boolean(notify.match(/sms/));
 
         // staged users may be loaded w/ a profile.
         $scope.set_expire_date();
@@ -1350,6 +1374,8 @@ function($scope , $routeParams , $q , $uibModal , $window , egCore ,
         // in standalone mode, we have no patronSvc
         var prs = patronRegSvc;
         $scope.patron = patron;
+        $scope.base_email = patron.email;
+        $scope.base_default_sms = prs.user_settings['opac.default_sms_notify']
         $scope.field_doc = prs.field_doc;
         $scope.edit_profiles = prs.edit_profiles;
         $scope.edit_profile_entries = prs.edit_profile_entries;
@@ -1896,7 +1922,20 @@ function($scope , $routeParams , $q , $uibModal , $window , egCore ,
 
     function extract_hold_notify() {
         var p = $scope.patron;
-        var notify = $scope.user_settings['opac.hold_notify'] || '';
+
+        // get the user's opac.hold_notify setting
+        var notify = $scope.user_settings['opac.hold_notify'];
+
+        // if it's not set, use the default opac.hold_notify value
+        if (!notify && !(notify === '')) {
+            var notify_stype = $scope.user_setting_types['opac.hold_notify'];
+            if (notify_stype && notify_stype.reg_default() !== undefined && notify_stype.reg_default() !== null) {
+                notify = notify_stype.reg_default();
+            } else {
+                // no setting and no default: set phone and email to true
+                notify = 'phone:email';
+            }
+        }
 
         $scope.hold_notify_type.phone = Boolean(notify.match(/phone/));
         $scope.hold_notify_type.email = Boolean(notify.match(/email/));
@@ -1933,6 +1972,28 @@ function($scope , $routeParams , $q , $uibModal , $window , egCore ,
     $scope.invalidate_field = function(field) {
         patronRegSvc.invalidate_field($scope.patron, field).then(function() {
             $scope.handle_field_changed($scope.patron, field);
+        });
+    }
+
+    $scope.send_test_email = function() {
+        patronRegSvc.send_test_message($scope.patron.id, 'au.email.test').then(function(res) {
+            if (res && res.template_output() && res.template_output().is_error() == 'f') {
+                 ngToast.success(egCore.strings.TEST_NOTIFY_SUCCESS);
+            } else {
+                ngToast.warning(egCore.strings.TEST_NOTIFY_FAIL);
+                if (res) console.log(res);
+            }
+        });
+    }
+
+    $scope.send_test_sms = function() {
+        patronRegSvc.send_test_message($scope.patron.id, 'au.sms_text.test').then(function(res) {
+            if (res && res.template_output() && res.template_output().is_error() == 'f') {
+                 ngToast.success(egCore.strings.TEST_NOTIFY_SUCCESS);
+            } else {
+                ngToast.warning(egCore.strings.TEST_NOTIFY_FAIL);
+                if (res) console.log(res);
+            }
         });
     }
 

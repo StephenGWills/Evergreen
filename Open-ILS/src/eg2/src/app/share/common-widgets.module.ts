@@ -8,13 +8,15 @@ import {CommonModule} from '@angular/common';
 import {FormsModule, ReactiveFormsModule} from '@angular/forms';
 import {NgbModule} from '@ng-bootstrap/ng-bootstrap';
 import {EgCoreModule} from '@eg/core/core.module';
-import {ComboboxComponent} from '@eg/share/combobox/combobox.component';
+import {ComboboxComponent, IdlClassTemplateDirective} from '@eg/share/combobox/combobox.component';
 import {ComboboxEntryComponent} from '@eg/share/combobox/combobox-entry.component';
 import {DateSelectComponent} from '@eg/share/date-select/date-select.component';
 import {OrgSelectComponent} from '@eg/share/org-select/org-select.component';
 import {DateRangeSelectComponent} from '@eg/share/daterange-select/daterange-select.component';
 import {DateTimeSelectComponent} from '@eg/share/datetime-select/datetime-select.component';
 import {ContextMenuModule} from '@eg/share/context-menu/context-menu.module';
+import {FileReaderComponent} from '@eg/share/file-reader/file-reader.component';
+import {IntervalInputComponent} from '@eg/share/interval-input/interval-input.component';
 
 
 @NgModule({
@@ -24,7 +26,10 @@ import {ContextMenuModule} from '@eg/share/context-menu/context-menu.module';
     DateSelectComponent,
     OrgSelectComponent,
     DateRangeSelectComponent,
-    DateTimeSelectComponent
+    DateTimeSelectComponent,
+    FileReaderComponent,
+    IdlClassTemplateDirective,
+    IntervalInputComponent,
   ],
   imports: [
     CommonModule,
@@ -45,8 +50,10 @@ import {ContextMenuModule} from '@eg/share/context-menu/context-menu.module';
     OrgSelectComponent,
     DateRangeSelectComponent,
     DateTimeSelectComponent,
-    ContextMenuModule
-  ]
+    ContextMenuModule,
+    FileReaderComponent,
+    IntervalInputComponent,
+  ],
 })
 
 export class CommonWidgetsModule { }

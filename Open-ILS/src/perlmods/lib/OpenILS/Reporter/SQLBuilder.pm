@@ -80,6 +80,7 @@ sub parse_report {
         ->set_where( $report->{where} )
         ->set_having( $report->{having} )
         ->set_order_by( $report->{order_by} )
+        ->set_do_rollup( $report->{do_rollup} )
         ->set_pivot_data( $report->{pivot_data} )
         ->set_pivot_label( $report->{pivot_label} )
         ->set_pivot_default( $report->{pivot_default} );
@@ -99,6 +100,11 @@ sub is_subquery {
     return $self->{_is_subquery};
 }
 
+sub do_rollup {
+    my $self = shift;
+    return $self->builder->{_do_rollup};
+}
+
 sub pivot_data {
     my $self = shift;
     return $self->builder->{_pivot_data};
@@ -112,6 +118,13 @@ sub pivot_label {
 sub pivot_default {
     my $self = shift;
     return $self->builder->{_pivot_default};
+}
+
+sub set_do_rollup {
+    my $self = shift;
+    my $p = shift;
+    $self->builder->{_do_rollup} = $p if (defined $p);
+    return $self;
 }
 
 sub set_pivot_default {
@@ -254,7 +267,14 @@ sub toSQL {
 
     my @group_by = $self->group_by_list;
 
-    $sql .= '  GROUP BY ' . join(', ', @group_by) . "\n" if (@group_by);
+    # The GROUP BY clause is used to generate distinct rows even if there are no aggregates in the select list
+    my $rollup_start = 'ROLLUP (';
+    my $rollup_end = ')';
+
+    $rollup_start = $rollup_end = ''
+        if (!$self->do_rollup or scalar(@group_by) == scalar(@{$self->{_select}})); # No ROLLUP if there are no aggregates, or not requested
+
+    $sql .= "  GROUP BY $rollup_start" . join(', ', @group_by) . "$rollup_end\n" if (@group_by);
     $sql .= "  HAVING " . join("\n\tAND ", map { $_->toSQL } @{ $self->{_having} }) . "\n" if (@{ $self->{_having} });
     $sql .= '  ORDER BY ' . join(', ', map { $_->toSQL } @{ $self->{_order_by} }) . "\n" if (@{ $self->{_order_by} });
 
@@ -740,7 +760,8 @@ package OpenILS::Reporter::SQLBuilder::Column::Transform::months_ago;
 
 sub toSQL {
     my $self = shift;
-    return 'EXTRACT(MONTH FROM AGE(NOW(),"' . $self->{_relation} . '"."' . $self->name . '"))';
+    return '(EXTRACT(YEAR FROM AGE(NOW(),"' . $self->{_relation} . '"."' . $self->name . '")) * 12) +'.
+           ' EXTRACT(MONTH FROM AGE(NOW(),"' . $self->{_relation} . '"."' . $self->name . '"))';
 }
 
 sub is_aggregate { return 0 }
@@ -762,7 +783,8 @@ package OpenILS::Reporter::SQLBuilder::Column::Transform::quarters_ago;
 
 sub toSQL {
     my $self = shift;
-    return 'EXTRACT(QUARTER FROM AGE(NOW(),"' . $self->{_relation} . '"."' . $self->name . '"))';
+    return '(EXTRACT(YEAR FROM AGE(NOW(),"' . $self->{_relation} . '"."' . $self->name . '")) * 4) +'.
+           ' EXTRACT(QUARTER FROM AGE(NOW(),"' . $self->{_relation} . '"."' . $self->name . '"))';
 }
 
 sub is_aggregate { return 0 }
@@ -954,10 +976,10 @@ sub toSQL {
         $sql .= '('. $self->SUPER::toSQL ." IS NOT NULL AND ". $self->SUPER::toSQL ." <> '')";
 
     } elsif (lc($op) eq 'between') {
-        $sql .= " BETWEEN ". join(" AND ", map { $_->toSQL } @$val);
+        $sql .= " BETWEEN SYMMETRIC ". join(" AND ", map { $_->toSQL } @$val);
 
     } elsif (lc($op) eq 'not between') {
-        $sql .= " NOT BETWEEN ". join(" AND ", map { $_->toSQL } @$val);
+        $sql .= " NOT BETWEEN SYMMETRIC ". join(" AND ", map { $_->toSQL } @$val);
 
     } elsif (lc($op) eq 'like') {
         $val = $$val[0] if (ref($val) eq 'ARRAY');

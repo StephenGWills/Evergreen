@@ -16,7 +16,8 @@ function($q , egCore , egWorkLog , patronSvc) {
             'ui.circ.billing.uncheck_bills_and_unfocus_payment_box',
             'ui.circ.billing.amount_warn', 'ui.circ.billing.amount_limit',
             'circ.staff_client.do_not_auto_attempt_print',
-            'circ.disable_patron_credit'
+            'circ.disable_patron_credit',
+            'credit.processor.default'
         ]).then(function(s) {return service.settings = s});
     }
 
@@ -60,6 +61,7 @@ function($q , egCore , egWorkLog , patronSvc) {
                 case 'cash_payment' : msg = egCore.strings.EG_WORK_LOG_CASH_PAYMENT; break;
                 case 'check_payment' : msg = egCore.strings.EG_WORK_LOG_CHECK_PAYMENT; break;
                 case 'credit_card_payment' : msg = egCore.strings.EG_WORK_LOG_CREDIT_CARD_PAYMENT; break;
+                case 'debit_card_payment' : msg = egCore.strings.EG_WORK_LOG_DEBIT_CARD_PAYMENT; break;
                 case 'credit_payment' : msg = egCore.strings.EG_WORK_LOG_CREDIT_PAYMENT; break;
                 case 'work_payment' : msg = egCore.strings.EG_WORK_LOG_WORK_PAYMENT; break;
                 case 'forgive_payment' : msg = egCore.strings.EG_WORK_LOG_FORGIVE_PAYMENT; break;
@@ -357,7 +359,8 @@ function($scope , $q , $routeParams , egCore , egConfirmDialog , $location,
                 // balance owed on the current item matches or exceeds
                 // the pending payment.  Apply the full remainder of
                 // the payment to this item.. and we're done.
-                item.payment_pending = payment_amount;
+                // Limit to two decimal places to avoid floating point issues
+                item.payment_pending = payment_amount.toFixed(2);
                 break;
             }
         }
@@ -541,6 +544,13 @@ function($scope , $q , $routeParams , egCore , egConfirmDialog , $location,
         if (s['circ.disable_patron_credit']) {
             $scope.disablePatronCredit = true;
         }
+        if (!s['credit.processor.default']) {
+            // If we don't have a CC processor, we should disable the "internal" CC form
+            $scope.disableCreditCardForm = true;
+        } else {
+            // Stripe isn't supported in the staff client currently, so disable here too
+            $scope.disableCreditCardForm = (s['credit.processor.default'] == 'Stripe');
+        }
     });
 
     $scope.gridControls.allItemsRetrieved = function() {
@@ -571,7 +581,7 @@ function($scope , $q , $routeParams , egCore , egConfirmDialog , $location,
                 'mbt' : ['summary', 'circulation'],
                 'circ' : ['target_copy'],
                 'acp' : ['call_number'],
-                'acn' : ['record'],
+                'acn' : ['record','owning_lib','prefix','suffix'],
                 'bre' : ['simple_record']
                 }
             },
@@ -621,8 +631,17 @@ function($scope , $q , $routeParams , egCore , egConfirmDialog , $location,
                     xact_start : xact.xact_start(),
                 }
                 if (xact.circulation()) {
-                    newXact.copy_barcode = xact.circulation().target_copy().barcode(),
-                    newXact.title = xact.circulation().target_copy().call_number().record().simple_record().title()
+                    newXact.copy_barcode = xact.circulation().target_copy().barcode();
+                    newXact.title = xact.circulation().target_copy().call_number().record().simple_record().title();
+                    newXact.call_number = {
+                        label : xact.circulation().target_copy().call_number().label(),
+			            prefix : xact.circulation().target_copy().call_number().prefix().label(),
+			            suffix : xact.circulation().target_copy().call_number().suffix().label(),
+                        owning_lib : {
+                            name : xact.circulation().target_copy().call_number().owning_lib().name(),
+                            shortname : xact.circulation().target_copy().call_number().owning_lib().shortname()
+                        }
+                    }
                 }
                 xacts.push(newXact);
             }
@@ -680,6 +699,8 @@ function($scope , $q , $routeParams , egCore , egConfirmDialog , $location,
         if ($scope.payment_type != 'credit_card_payment') 
             return $q.when();
 
+        var disableCreditCardForm = $scope.disableCreditCardForm;
+
         return $uibModal.open({
             templateUrl : './circ/patron/t_cc_payment_dialog',
             backdrop: 'static',
@@ -689,7 +710,8 @@ function($scope , $q , $routeParams , egCore , egConfirmDialog , $location,
 
                     $scope.context = {
                         cc : {
-                            where_process : '1', // internal=1 ; external=0
+                            where_process : disableCreditCardForm ? '0' : '1', // internal=1 ; external=0
+                            disable_internal : disableCreditCardForm,
                             type : 'VISA', // external only
                             billing_first : patronSvc.current.first_given_name(),
                             billing_last : patronSvc.current.family_name()
@@ -1095,7 +1117,7 @@ function($scope,  $q , egCore , patronSvc , billSvc , egPromptDialog , $location
                 'mbt' : ['summary', 'circulation'],
                 'circ' : ['target_copy'],
                 'acp' : ['call_number'],
-                'acn' : ['record'],
+                'acn' : ['record','owning_lib','prefix','suffix'],
                 'bre' : ['simple_record']
                 }
             },
@@ -1145,8 +1167,17 @@ function($scope,  $q , egCore , patronSvc , billSvc , egPromptDialog , $location
                     xact_start : xact.xact_start(),
                 }
                 if (xact.circulation()) {
-                    newXact.copy_barcode = xact.circulation().target_copy().barcode(),
-                    newXact.title = xact.circulation().target_copy().call_number().record().simple_record().title()
+                    newXact.copy_barcode = xact.circulation().target_copy().barcode();
+                    newXact.title = xact.circulation().target_copy().call_number().record().simple_record().title();
+                    newXact.call_number = {
+                        label : xact.circulation().target_copy().call_number().label(),
+			            prefix : xact.circulation().target_copy().call_number().prefix().label(),
+			            suffix : xact.circulation().target_copy().call_number().suffix().label(),
+                        owning_lib : {
+                            name : xact.circulation().target_copy().call_number().owning_lib().name(),
+                            shortname : xact.circulation().target_copy().call_number().owning_lib().shortname()
+                        }
+                    }
                 }
                 xacts.push(newXact);
             }

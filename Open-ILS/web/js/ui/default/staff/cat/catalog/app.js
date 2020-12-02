@@ -1004,9 +1004,10 @@ function($scope , $routeParams , $location , $window , $q , egCore , egHolds , e
                         'open-ils.circ',
                         'open-ils.circ.holds.test_and_create.batch.override',
                         egCore.auth.token(), args, h.copy_list
-                    );
-
-                    $uibModalInstance.close();
+                    ).then(function() {
+                        holds = []; // force the holds grid to refetch data.
+                        $uibModalInstance.close();
+                    });
                 }
 
                 $scope.cancel = function($event) {
@@ -1044,10 +1045,26 @@ function($scope , $routeParams , $location , $window , $q , egCore , egHolds , e
                 controller:
                            ['$scope','$uibModalInstance',
                     function($scope , $uibModalInstance) {
+                        $scope.duplicate_barcode = false;
                         $scope.isModal = true;
                         $scope.focusBarcode = false;
                         $scope.focusBarcode2 = true;
                         $scope.barcode1 = cp.barcode();
+
+                        // check input to see if it's a duplicate barcode
+                        $scope.checkCurrentBarcode = function() {
+                            if (!$scope.duplicate_barcode_string) {
+                                $scope.duplicate_barcode_string = window.duplicate_barcode_string;
+                            }
+                            var searchParams = {
+                                deleted : 'f',
+                                'barcode' : $scope.barcode2,
+                                id : { '!=' : $scope.copyId }
+                            };
+                            egCore.pcrud.search('acp', searchParams).then(function (res) {
+                                $scope.duplicate_barcode = res;
+                            });
+                        }
 
                         $scope.updateBarcode = function() {
                             $scope.copyNotFound = false;
@@ -1778,6 +1795,7 @@ function($scope , $routeParams , $location , $window , $q , egCore , egHolds , e
     var provider = egGridDataProvider.instance({});
     var holds = []; // current list of holds
     var hold_count = 0;
+    var hold_grid_load_promise;
 
     $scope.hold_grid_data_provider = provider;
     $scope.grid_actions = egHoldGridActions;
@@ -1787,8 +1805,16 @@ function($scope , $routeParams , $location , $window , $q , egCore , egHolds , e
     provider.get = function(offset, count) {
         if ($scope.record_tab != 'holds') return $q.when();
 
+        if (hold_grid_load_promise) {
+            // Active load in progress.
+            console.debug('Exiting concurrent hold fetch');
+            return hold_grid_load_promise;
+        }
+
         // see if we have the requested range cached
         if (holds[offset]) {
+            console.debug(
+                'Serving holds from cache with pickup lib', $scope.pickup_ou.id());
             return provider.arrayNotifier(holds, offset, count);
         }
 
@@ -1803,7 +1829,9 @@ function($scope , $routeParams , $location , $window , $q , egCore , egHolds , e
         };
 
         var order_by = [{ request_time : null }];
-        if (provider.sort && provider.sort.length) {
+        // NOTE: Server sort is disabled for now.  See the comment on
+        // similar code in circ/holds/app.js for details.
+        if (false && provider.sort && provider.sort.length) {
             order_by = [];
             angular.forEach(provider.sort, function (c) {
                 if (!angular.isObject(c)) {
@@ -1826,12 +1854,16 @@ function($scope , $routeParams , $location , $window , $q , egCore , egHolds , e
             });
         }
 
+        console.debug(
+            'Fetching holds from network with PU lib', $scope.pickup_ou.id());
+
         egProgressDialog.open({max : 1, value : 0});
         var first = true;
-        return egHolds.fetch_wide_holds(
+        hold_grid_load_promise = egHolds.fetch_wide_holds(
             restrictions,
             order_by
         ).then(function () {
+                hold_grid_load_promise = null;
                 return provider.arrayNotifier(holds, offset, count);
             },
             null,
@@ -1850,8 +1882,12 @@ function($scope , $routeParams , $location , $window , $q , egCore , egHolds , e
                     holds.push(new_item);
                 }
             }
-        ).finally(egProgressDialog.close);
+        ).finally(function() {
+            hold_grid_load_promise = null;
+            egProgressDialog.close();
+        });
 
+        return hold_grid_load_promise;
     }
 
     $scope.detail_view = function(action, user_data, items) {
@@ -1867,10 +1903,28 @@ function($scope , $routeParams , $location , $window , $q , egCore , egHolds , e
     // refresh the list of record holds when the pickup lib is changed.
     $scope.pickup_ou = egCore.org.get(egCore.auth.user().ws_ou());
     $scope.pickup_ou_changed = function(org) {
-        $scope.pickup_ou = org;
-        holds = []
-        hold_count = 0;
-        provider.refresh();
+        if ($scope.pickup_ou && $scope.pickup_ou.id() == org.id()) {
+            // This fires on every component render, even though the
+            // value we already have may match.  Avoid duplicate lookups.
+            return;
+        }
+
+        var promise = hold_grid_load_promise || $q.when();
+
+        // Avoid refreshing the grid if it's currently loading data.
+        promise.finally(function() {
+
+            // Previous grid data load complete.  Timeout gives the
+            // grid a chance to mark itself as load-completed, which
+            // happens after the data load promise is done.
+            setTimeout(function() {
+                console.debug('Refreshing holds after PU lib change to ', org.id());
+                $scope.pickup_ou = org;
+                holds = []
+                hold_count = 0;
+                provider.refresh();
+            });
+        })
     }
 
     function map_prefix_to_subhash (h,pf) {
@@ -1942,13 +1996,13 @@ function($scope , $routeParams , $location , $window , $q , egCore , egHolds , e
         // A record ID in the path indicates a request for the record-
         // specific page.
         if ($routeParams.record_id) {
-            url = url.replace(/advanced/, '/record/' + $scope.record_id);
+            url = url.replace(/\/advanced/, '/record/' + $scope.record_id);
         }
 
         // Jumping directly to the results page by passing a search
         // query via the URL.  Copy all URL params to the iframe url.
         if ($location.path().match(/catalog\/results/)) {
-            url = url.replace(/advanced/, '/results?');
+            url = url.replace(/\/advanced/, '/results?');
             var first = true;
             angular.forEach($location.search(), function(val, key) {
                 if (!first) url += '&';

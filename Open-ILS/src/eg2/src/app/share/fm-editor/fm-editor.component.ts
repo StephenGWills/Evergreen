@@ -1,5 +1,6 @@
 import {Component, OnInit, Input, ViewChild,
     Output, EventEmitter, TemplateRef} from '@angular/core';
+import {NgForm} from '@angular/forms';
 import {IdlService, IdlObject} from '@eg/core/idl.service';
 import {Observable} from 'rxjs';
 import {map} from 'rxjs/operators';
@@ -75,6 +76,9 @@ export interface FmFieldOptions {
     // Render the field using this custom template instead of chosing
     // from the default set of form inputs.
     customTemplate?: CustomFieldTemplate;
+
+    // help text to display via a popover
+    helpText?: StringComponent;
 }
 
 @Component({
@@ -139,6 +143,9 @@ export class FmRecordEditorComponent
     // for displayMode === 'inline'
     @Input() hideBanner: boolean;
 
+    // do not close dialog on error saving record
+    @Input() remainOpenOnError: false;
+
     // Emit the modified object when the save action completes.
     @Output() recordSaved = new EventEmitter<IdlObject>();
 
@@ -155,6 +162,7 @@ export class FmRecordEditorComponent
     @ViewChild('successStr', { static: true }) successStr: StringComponent;
     @ViewChild('failStr', { static: true }) failStr: StringComponent;
     @ViewChild('confirmDel', { static: true }) confirmDel: ConfirmDialogComponent;
+    @ViewChild('fmEditForm', { static: false}) fmEditForm: NgForm;
 
     // IDL info for the the selected IDL class
     idlDef: any;
@@ -290,6 +298,10 @@ export class FmRecordEditorComponent
         return this.displayMode === 'dialog';
     }
 
+    isDirty(): boolean {
+        return this.fmEditForm ? this.fmEditForm.dirty : false;
+    }
+
     // DEPRECATED: This is a duplicate of this.record = abc;
     setRecord(record: IdlObject) {
         console.warn('fm-editor:setRecord() is deprecated. ' +
@@ -419,7 +431,9 @@ export class FmRecordEditorComponent
             || this.idl.getClassSelector(class_) || idField;
 
         return list.map(item => {
-            return {id: item[idField](), label: item[selector]()};
+            if (item !== undefined) {
+                return {id: item[idField](), label: item[selector]()};
+            }
         });
     }
 
@@ -529,6 +543,11 @@ export class FmRecordEditorComponent
             field.context = fieldOptions.customTemplate.context;
         }
 
+        if (fieldOptions.helpText) {
+            field.helpText = fieldOptions.helpText;
+            field.helpText.current().then(help => field.helpTextValue = help);
+        }
+
         return promise || Promise.resolve();
     }
 
@@ -615,13 +634,16 @@ export class FmRecordEditorComponent
         this.pcrud[this.mode]([recToSave]).toPromise().then(
             result => {
                 this.recordSaved.emit(result);
+                if (this.fmEditForm) {
+                    this.fmEditForm.form.markAsPristine();
+                }
                 this.successStr.current().then(msg => this.toast.success(msg));
                 if (this.isDialog()) { this.record = undefined; this.close(result); }
             },
             error => {
                 this.recordError.emit(error);
                 this.failStr.current().then(msg => this.toast.warning(msg));
-                if (this.isDialog()) { this.error(error); }
+                if (this.isDialog() && !this.remainOpenOnError) { this.error(error); }
             }
         );
     }
@@ -639,7 +661,7 @@ export class FmRecordEditorComponent
                 error => {
                     this.recordError.emit(error);
                     this.failStr.current().then(msg => this.toast.warning(msg));
-                    if (this.isDialog()) { this.error(error); }
+                    if (this.isDialog() && !this.remainOpenOnError) { this.error(error); }
                 }
             );
         });

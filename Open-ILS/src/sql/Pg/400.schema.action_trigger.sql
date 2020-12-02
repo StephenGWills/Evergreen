@@ -57,6 +57,9 @@ INSERT INTO action_trigger.hook (key,core_type,description) VALUES ('renewal','c
 INSERT INTO action_trigger.hook (key,core_type,description) VALUES ('checkout.due.emergency_closing','aecc','Circulation due date was adjusted by the Emergency Closing handler');
 INSERT INTO action_trigger.hook (key,core_type,description) VALUES ('hold.shelf_expire.emergency_closing','aech','Hold shelf expire time was adjusted by the Emergency Closing handler');
 INSERT INTO action_trigger.hook (key,core_type,description) VALUES ('booking.due.emergency_closing','aecr','Booking reservation return date was adjusted by the Emergency Closing handler');
+INSERT INTO action_trigger.hook (key,core_type,description) VALUES ('bre.edit','bre','A bib record was edited');
+INSERT INTO action_trigger.hook (key, core_type, description) VALUES ('au.email.test', 'au', 'A test email has been requested for this user');
+INSERT INTO action_trigger.hook (key, core_type, description) VALUES ('au.sms_text.test', 'au', 'A test SMS has been requested for this user');
 
 -- and much more, I'm sure
 
@@ -286,6 +289,33 @@ CREATE TABLE action_trigger.event_params (
     param       TEXT        NOT NULL, -- the key under environment.event.params to store the output of ...
     value       TEXT        NOT NULL, -- ... the eval() output of this.  Has access to environment (and, well, all of perl)
     CONSTRAINT event_params_event_def_param_once UNIQUE (event_def,param)
+);
+
+CREATE TABLE action_trigger.event_def_group (
+    id      SERIAL  PRIMARY KEY,
+    owner   INT     NOT NULL REFERENCES actor.org_unit (id)
+                        ON DELETE RESTRICT ON UPDATE CASCADE
+                        DEFERRABLE INITIALLY DEFERRED,
+    hook    TEXT    NOT NULL REFERENCES action_trigger.hook (key)
+                        ON DELETE RESTRICT ON UPDATE CASCADE
+                        DEFERRABLE INITIALLY DEFERRED,
+    active  BOOL    NOT NULL DEFAULT TRUE,
+    name    TEXT    NOT NULL
+);
+SELECT SETVAL('action_trigger.event_def_group_id_seq'::TEXT, 100, TRUE);
+
+CREATE TABLE action_trigger.event_def_group_member (
+    id          SERIAL  PRIMARY KEY,
+    grp         INT     NOT NULL REFERENCES action_trigger.event_def_group (id)
+                            ON DELETE CASCADE ON UPDATE CASCADE
+                            DEFERRABLE INITIALLY DEFERRED,
+    event_def   INT     NOT NULL REFERENCES action_trigger.event_definition (id)
+                            ON DELETE RESTRICT ON UPDATE CASCADE
+                            DEFERRABLE INITIALLY DEFERRED,
+    sortable    BOOL    NOT NULL DEFAULT TRUE,
+    holdings    BOOL    NOT NULL DEFAULT FALSE,
+    external    BOOL    NOT NULL DEFAULT FALSE,
+    name        TEXT    NOT NULL
 );
 
 CREATE OR REPLACE FUNCTION action_trigger.purge_events() RETURNS VOID AS $_$

@@ -172,6 +172,7 @@ sub biblio_record_replace_marc  {
         $e, $recid, $newxml, $source, $fix_tcn, $oargs, $strip_grps);
 
     $e->commit unless $U->event_code($res);
+    $U->create_events_for_hook('bre.edit', $res, $e->requestor->ws_ou) unless $U->event_code($res);;
 
     return $res;
 }
@@ -208,6 +209,7 @@ sub template_overlay_biblio_record_entry {
         my $success = $e->json_query(
             { from => [ 'vandelay.template_overlay_bib_record', $template, $rid ] }
         )->[0]->{'vandelay.template_overlay_bib_record'};
+        $U->create_events_for_hook('bre.edit', $rec, $e->requestor->ws_ou);
 
         $conn->respond({ record => $rid, success => $success });
     }
@@ -238,12 +240,17 @@ __PACKAGE__->register_method(
         @param auth The authtoken
         @param container The container, um, containing the records to be updated by the template
         @param template The overlay template, or nothing and the method will look for a negative bib id in the container
+        @param options Hash of options; currently supports:
+            xact_per_record: Apply updates to each bib record within its own transaction.
         @return Cache key to check for status of the container overlay
     #
 );
 
 sub template_overlay_container {
-    my($self, $conn, $auth, $container, $template) = @_;
+    my($self, $conn, $auth, $container, $template, $options) = @_;
+    $options ||= {};
+    my $xact_per_rec = $options->{xact_per_record};
+
     my $e = new_editor(authtoken=>$auth, xact=>1);
     return $e->die_event unless $e->checkauth;
 
@@ -263,14 +270,20 @@ sub template_overlay_container {
         $template = $e->retrieve_biblio_record_entry( $titem->target_biblio_record_entry )->marc;
     }
 
+    my $num_total = scalar(@$items);
     my $num_failed = 0;
     my $num_succeeded = 0;
 
     $conn->respond_complete(
-        $actor->request('open-ils.actor.anon_cache.set_value', $auth, batch_edit_progress => {})->gather(1)
+        $actor->request('open-ils.actor.anon_cache.set_value', $auth, 
+            batch_edit_progress => {total => $num_total})->gather(1)
     ) if ($actor);
 
+    # read-only up to here.
+    $e->rollback if $xact_per_rec;
+
     for my $item ( @$items ) {
+        $e->xact_begin if $xact_per_rec;
         my $rec = $e->retrieve_biblio_record_entry($item->target_biblio_record_entry);
         next unless $rec;
 
@@ -284,6 +297,7 @@ sub template_overlay_container {
         if ($success eq 'f') {
             $num_failed++;
         } else {
+            $U->create_events_for_hook('bre.edit', $rec, $e->requestor->ws_ou);
             $num_succeeded++;
         }
 
@@ -291,6 +305,7 @@ sub template_overlay_container {
             $actor->request(
                 'open-ils.actor.anon_cache.set_value', $auth,
                 batch_edit_progress => {
+                    total     => $num_total,
                     succeeded => $num_succeeded,
                     failed    => $num_failed
                 },
@@ -308,6 +323,7 @@ sub template_overlay_container {
                         batch_edit_progress => {
                             complete => 1,
                             success  => 'f',
+                            total     => $num_total,
                             succeeded => $num_succeeded,
                             failed    => $num_failed,
                         }
@@ -318,19 +334,23 @@ sub template_overlay_container {
                 }
             }
         }
+        $e->xact_commit if $xact_per_rec;
     }
 
     if ($titem && !$num_failed) {
+        $e->xact_begin if $xact_per_rec;
         return $e->die_event unless ($e->delete_container_biblio_record_entry_bucket_item($titem));
+        $e->xact_commit if $xact_per_rec;
     }
 
-    if ($e->commit) {
+    if ($xact_per_rec || $e->commit) {
         if ($actor) {
             $actor->request(
                 'open-ils.actor.anon_cache.set_value', $auth,
                 batch_edit_progress => {
                     complete => 1,
                     success  => 't',
+                    total     => $num_total,
                     succeeded => $num_succeeded,
                     failed    => $num_failed,
                 }
@@ -345,6 +365,7 @@ sub template_overlay_container {
                 batch_edit_progress => {
                     complete => 1,
                     success  => 'f',
+                    total     => $num_total,
                     succeeded => $num_succeeded,
                     failed    => $num_failed,
                 }
@@ -374,6 +395,7 @@ sub update_biblio_record_entry {
     return $e->die_event unless $e->allowed('UPDATE_RECORD');
     $e->update_biblio_record_entry($record) or return $e->die_event;
     $e->commit;
+    $U->create_events_for_hook('bre.edit', $record, $e->requestor->ws_ou);
     return 1;
 }
 
@@ -413,6 +435,7 @@ sub undelete_biblio_record_entry {
 
     $e->update_biblio_record_entry($record) or return $e->die_event;
     $e->commit;
+    $U->create_events_for_hook('bre.edit', $record, $e->requestor->ws_ou);
     return 1;
 }
 
@@ -500,24 +523,34 @@ __PACKAGE__->register_method(
         params => [
             {desc => 'Record ID', type => 'number'},
             {desc => '(Optional) Classification scheme ID', type => 'number'},
+            {desc => '(Optional) Context org unit ID for default classification lookup', type => 'number'},
         ]
     },
     return => {desc => 'Hash of candidate call numbers identified by tag' }
 );
 
 sub biblio_record_marc_cn {
-    my( $self, $client, $id, $class ) = @_;
+    my( $self, $client, $id, $class, $ctx_org_id ) = @_;
 
     my $e = new_editor();
-    my $marc = $e->retrieve_biblio_record_entry($id)->marc;
+    my $bre = $e->retrieve_biblio_record_entry($id);
+    my $marc = $bre->marc;
 
     my $doc = XML::LibXML->new->parse_string($marc);
     $doc->documentElement->setNamespace( "http://www.loc.gov/MARC21/slim", "marc", 1 );
 
+    if (!$class) {
+        my $ctx_org = $ctx_org_id || $bre->owner || $U->get_org_tree->id; # root org
+        $class = $U->ou_ancestor_setting_value(
+            $ctx_org, 'cat.default_classification_scheme', $e);
+    }
+
     my @fields;
     my @res;
     if ($class) {
-        @fields = split(/,/, $e->retrieve_asset_call_number_class($class)->field);
+        # be sure the class ID provided exists.
+        my $cn_class = $e->retrieve_asset_call_number_class($class) or return $e->event;
+        @fields = split(/,/, $cn_class->field);
     } else {
         @fields = qw/050ab 055ab 060ab 070ab 080ab 082ab 086ab 088ab 090 092 096 098 099/;
     }
@@ -1499,11 +1532,17 @@ sub batch_volume_transfer {
         # Now see if any empty records need to be deleted after all of this
         my $keep_on_empty = $U->ou_ancestor_setting_value($e->requestor->ws_ou, 'cat.bib.keep_on_empty', $e);
         unless ($U->is_true($keep_on_empty)) {
+
             for (@rec_ids) {
                 $logger->debug("merge: seeing if we should delete record $_...");
-                $evt = OpenILS::Application::Cat::BibCommon->delete_rec($e, $_)
-                    if OpenILS::Application::Cat::BibCommon->title_is_empty($e, $_);
-                return $evt if $evt;
+                if (OpenILS::Application::Cat::BibCommon->title_is_empty($e, $_)) {
+                    # check for any title holds on the bib, bail if so
+                    my $has_holds = OpenILS::Application::Cat::BibCommon->title_has_holds($e, $_);
+                    return OpenILS::Event->new('TITLE_HAS_HOLDS', payload => $_) if $has_holds;
+                    # we're good, delete the record
+                    $evt = OpenILS::Application::Cat::BibCommon->delete_rec($e, $_);
+                    return $evt if $evt;
+                }
             }
         }
     }

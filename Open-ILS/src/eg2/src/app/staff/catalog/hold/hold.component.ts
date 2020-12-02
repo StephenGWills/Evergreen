@@ -13,6 +13,7 @@ import {StaffCatalogService} from '../catalog.service';
 import {HoldsService, HoldRequest,
     HoldRequestTarget} from '@eg/staff/share/holds/holds.service';
 import {ComboboxEntry} from '@eg/share/combobox/combobox.component';
+import {PatronService} from '@eg/staff/share/patron/patron.service';
 import {PatronSearchDialogComponent
   } from '@eg/staff/share/patron/search-dialog.component';
 
@@ -81,6 +82,7 @@ export class HoldComponent implements OnInit {
         private cat: CatalogService,
         private staffCat: StaffCatalogService,
         private holds: HoldsService,
+        private patron: PatronService,
         private perm: PermService
     ) {
         this.holdContexts = [];
@@ -89,9 +91,21 @@ export class HoldComponent implements OnInit {
 
     ngOnInit() {
 
+        // Respond to changes in hold type.  This currently assumes hold
+        // types only toggle post-init between copy-level types (C,R,F)
+        // and no other params (e.g. target) change with it.  If other
+        // types require tracking, additional data collection may be needed.
+        this.route.paramMap.subscribe(
+            (params: ParamMap) => this.holdType = params.get('type'));
+
         this.holdType = this.route.snapshot.params['type'];
         this.holdTargets = this.route.snapshot.queryParams['target'];
         this.holdFor = this.route.snapshot.queryParams['holdFor'] || 'patron';
+
+        if (this.staffCat.holdForBarcode) {
+            this.holdFor = 'patron';
+            this.userBarcode = this.staffCat.holdForBarcode;
+        }
 
         if (!Array.isArray(this.holdTargets)) {
             this.holdTargets = [this.holdTargets];
@@ -107,7 +121,7 @@ export class HoldComponent implements OnInit {
             return ctx;
         });
 
-        if (this.holdFor === 'staff') {
+        if (this.holdFor === 'staff' || this.userBarcode) {
             this.holdForChanged();
         }
 
@@ -245,25 +259,18 @@ export class HoldComponent implements OnInit {
 
         this.user = null;
         this.currentUserBarcode = this.userBarcode;
+        this.getUser();
+    }
 
-        this.net.request(
-            'open-ils.actor',
-            'open-ils.actor.get_barcodes',
-            this.auth.token(), this.auth.user().ws_ou(),
-            'actor', this.userBarcode
-        ).subscribe(barcodes => {
+    getUser(id?: number) {
+        const flesh = {flesh: 1, flesh_fields: {au: ['settings']}};
 
-            // Use the first successful barcode response.
-            // TODO: What happens when there are multiple responses?
-            // Use for-loop for early exit since we have async
-            // action within the loop.
-            for (let i = 0; i < barcodes.length; i++) {
-                const bc = barcodes[i];
-                if (!this.evt.parse(bc)) {
-                    this.getUser(bc.id);
-                    break;
-                }
-            }
+        const promise = id ? this.patron.getById(id, flesh) :
+            this.patron.getByBarcode(this.userBarcode);
+
+        promise.then(user => {
+            this.user = user;
+            this.applyUserSettings();
         });
     }
 
@@ -272,14 +279,6 @@ export class HoldComponent implements OnInit {
         this.notifyPhone = true;
         this.phoneValue = '';
         this.pickupLib = this.requestor.ws_ou();
-    }
-
-    getUser(id: number) {
-        this.pcrud.retrieve('au', id, {flesh: 1, flesh_fields: {au: ['settings']}})
-        .subscribe(user => {
-            this.user = user;
-            this.applyUserSettings();
-        });
     }
 
     applyUserSettings() {
@@ -324,7 +323,10 @@ export class HoldComponent implements OnInit {
     // Attempt hold placement on all targets
     placeHolds(idx?: number) {
         if (!idx) { idx = 0; }
-        if (!this.holdTargets[idx]) { return; }
+        if (!this.holdTargets[idx]) {
+            this.placeHoldsClicked = false;
+            return;
+        }
         this.placeHoldsClicked = true;
 
         const target = this.holdTargets[idx];
@@ -339,9 +341,21 @@ export class HoldComponent implements OnInit {
         ctx.processing = true;
         const selectedFormats = this.mrSelectorsToFilters(ctx);
 
+        let hType = this.holdType;
+        let hTarget = ctx.holdTarget;
+        if (hType === 'T' && ctx.holdMeta.part) {
+            // A Title hold morphs into a Part hold at hold placement time
+            // if a part is selected.  This can happen on a per-hold basis
+            // when placing T-level holds.
+            hType = 'P';
+            hTarget = ctx.holdMeta.part.id();
+        }
+
+        console.debug(`Placing ${hType}-type hold on ${hTarget}`);
+
         return this.holds.placeHold({
-            holdTarget: ctx.holdTarget,
-            holdType: this.holdType,
+            holdTarget: hTarget,
+            holdType: hType,
             recipient: this.user.id(),
             requestor: this.requestor.id(),
             pickupLib: this.pickupLib,
@@ -356,20 +370,22 @@ export class HoldComponent implements OnInit {
 
         }).toPromise().then(
             request => {
-                console.log('hold returned: ', request);
                 ctx.lastRequest = request;
                 ctx.processing = false;
 
-                // If this request failed and was not already an override,
-                // see of this user has permission to override.
-                if (!request.override &&
-                    !request.result.success && request.result.evt) {
+                if (!request.result.success) {
+                    console.debug('hold failed with: ', request);
 
-                    const txtcode = request.result.evt.textcode;
-                    const perm = txtcode + '.override';
+                    // If this request failed and was not already an override,
+                    // see of this user has permission to override.
+                    if (!request.override && request.result.evt) {
 
-                    return this.perm.hasWorkPermHere(perm).then(
-                        permResult => ctx.canOverride = permResult[perm]);
+                        const txtcode = request.result.evt.textcode;
+                        const perm = txtcode + '.override';
+
+                        return this.perm.hasWorkPermHere(perm).then(
+                            permResult => ctx.canOverride = permResult[perm]);
+                    }
                 }
             },
             error => {
@@ -418,6 +434,22 @@ export class HoldComponent implements OnInit {
                 this.applyUserSettings();
             }
         );
+    }
+
+    isItemHold(): boolean {
+        return this.holdType === 'C'
+            || this.holdType === 'R'
+            || this.holdType === 'F';
+    }
+
+    setPart(ctx: HoldContext, $event) {
+        const partId = $event.target.value;
+        if (partId) {
+            ctx.holdMeta.part =
+                ctx.holdMeta.parts.filter(p => +p.id() === +partId)[0];
+        } else {
+            ctx.holdMeta.part = null;
+        }
     }
 }
 

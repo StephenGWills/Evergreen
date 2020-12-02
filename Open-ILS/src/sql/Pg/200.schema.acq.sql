@@ -84,6 +84,7 @@ CREATE TABLE acq.provider (
     default_copy_count  INT     NOT NULL DEFAULT 0,
 	default_claim_policy INT    REFERENCES acq.claim_policy
 	                            DEFERRABLE INITIALLY DEFERRED,
+    primary_contact     INT,    -- REFERENCE acq.provider_contact(id) ON DELETE SET NULL ON UPDATE CASCADE DEFERRABLE INITIALLY DEFERRED
     CONSTRAINT provider_name_once_per_owner UNIQUE (name,owner),
 	CONSTRAINT code_once_per_owner UNIQUE (code, owner)
 );
@@ -2584,5 +2585,29 @@ CREATE OR REPLACE VIEW acq.lineitem_summary AS
         ) AS paid_amount
 
         FROM acq.lineitem AS li;
+
+
+CREATE VIEW acq.li_state_label AS
+  SELECT *
+  FROM (VALUES
+          ('new', oils_i18n_gettext('new', 'New', 'jubstlbl', 'label')),
+          ('selector-ready', oils_i18n_gettext('selector-ready', 'Selector-Ready', 'jubstlbl', 'label')),
+          ('order-ready', oils_i18n_gettext('order-ready', 'Order-Ready', 'jubstlbl', 'label')),
+          ('approved', oils_i18n_gettext('approved', 'Approved', 'jubstlbl', 'label')),
+          ('pending-order', oils_i18n_gettext('pending-order', 'Pending-Order', 'jubstlbl', 'label')),
+          ('on-order', oils_i18n_gettext('on-order', 'On-Order', 'jubstlbl', 'label')),
+          ('received', oils_i18n_gettext('received', 'Received', 'jubstlbl', 'label')),
+          ('cancelled', oils_i18n_gettext('cancelled', 'Cancelled', 'jubstlbl', 'label'))
+       ) AS t (id,label);
+
+CREATE VIEW acq.po_state_label AS
+  SELECT *
+  FROM (VALUES
+          ('new', oils_i18n_gettext('new', 'New', 'acqpostlbl', 'label')),
+          ('pending', oils_i18n_gettext('pending', 'Pending', 'acqpostlbl', 'label')),
+          ('on-order', oils_i18n_gettext('on-order', 'On-Order', 'acqpostlbl', 'label')),
+          ('received', oils_i18n_gettext('received', 'Received', 'acqpostlbl', 'label')),
+          ('cancelled', oils_i18n_gettext('cancelled', 'Cancelled', 'acqpostlbl', 'label'))
+       ) AS t (id,label);
 
 COMMIT;

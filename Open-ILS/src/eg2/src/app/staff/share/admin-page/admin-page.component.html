@@ -16,13 +16,27 @@
 <ng-template #createErrStrTmpl i18n>Failed to create new {{idlClassDef.label}}</ng-template>
 <eg-string #createErrString [template]="createErrStrTmpl"></eg-string>
 
-<ng-container *ngIf="orgField">
-  <eg-org-family-select
-    [limitPerms]="viewPerms" 
-    [selectedOrgId]="contextOrg.id()"
-    [(ngModel)]="searchOrgs"
-    (ngModelChange)="grid.reload()">
-  </eg-org-family-select>
+<ng-container *ngIf="orgField || gridFilters">
+  <div class="row">
+    <div class="col-lg-6">
+      <ng-container *ngIf="orgField">
+        <eg-org-family-select
+          [limitPerms]="viewPerms" 
+          [selectedOrgId]="contextOrg.id()"
+          [(ngModel)]="searchOrgs"
+          (ngModelChange)="grid.reload()">
+        </eg-org-family-select>
+      </ng-container>
+    </div>
+    <div class="col-lg-6 d-flex">
+      <div class="flex-1"></div><!-- push right -->
+      <ng-container *ngIf="gridFilters">
+        <span i18n>Filters Applied: {{gridFilters | json}}</span>
+        <a class="pl-2 font-italic" 
+          [attr.href]="clearGridFiltersUrl()" i18n>Clear Filters</a>
+      </ng-container>
+    </div>
+  </div>
   <hr/>
 </ng-container>
 
@@ -32,6 +46,11 @@
 <ng-container *ngIf="helpTemplate">
   <ng-container *ngTemplateOutlet="helpTemplate"></ng-container>
 </ng-container>
+
+<ng-template #configFieldLink let-row="row" let-col="col">
+  <a i18n-title title="Link To {{col.label}}"
+    [attr.href]="configFieldLinkUrl(row, col)">{{configLinkLabel(row, col)}}</a>
+</ng-template>
 
 <eg-grid #grid idlClass="{{idlClass}}" [dataSource]="dataSource" hideFields="{{hideGridFields}}"
     [sortable]="true" persistKey="{{persistKey}}">
@@ -45,6 +64,10 @@
   </eg-grid-toolbar-action>
   <eg-grid-toolbar-action label="Delete Selected" i18n-label (onClick)="deleteSelected($event)">
   </eg-grid-toolbar-action>
+  <ng-container *ngFor="let cf of configFields">
+    <eg-grid-column name="{{cf.name}}" [cellTemplate]="configFieldLink">
+    </eg-grid-column>
+  </ng-container>
 </eg-grid>
 
 <eg-fm-record-editor #editDialog idlClass="{{idlClass}}" 

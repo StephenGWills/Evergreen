@@ -33,10 +33,17 @@ import {ConjoinedItemsDialogComponent
     } from '@eg/staff/share/holdings/conjoined-items-dialog.component';
 import {MakeBookableDialogComponent
     } from '@eg/staff/share/booking/make-bookable-dialog.component';
+import {TransferItemsComponent
+    } from '@eg/staff/share/holdings/transfer-items.component';
+import {TransferHoldingsComponent
+    } from '@eg/staff/share/holdings/transfer-holdings.component';
+import {AlertDialogComponent} from '@eg/share/dialog/alert.component';
+import {BroadcastService} from '@eg/share/util/broadcast.service';
+
 
 // The holdings grid models a single HoldingsTree, composed of HoldingsTreeNodes
 // flattened on-demand into a list of HoldingEntry objects.
-class HoldingsTreeNode {
+export class HoldingsTreeNode {
     children: HoldingsTreeNode[];
     nodeType: 'org' | 'callNum' | 'copy';
     target: any;
@@ -56,7 +63,7 @@ class HoldingsTree {
     }
 }
 
-class HoldingsEntry {
+export class HoldingsEntry {
     index: number;
     // org unit shortname, call number label, or copy barcode
     locationLabel: string;
@@ -109,6 +116,12 @@ export class HoldingsMaintenanceComponent implements OnInit {
         private conjoinedDialog: ConjoinedItemsDialogComponent;
     @ViewChild('makeBookableDialog', { static: true })
         private makeBookableDialog: MakeBookableDialogComponent;
+    @ViewChild('transferItems', {static: false})
+        private transferItems: TransferItemsComponent;
+    @ViewChild('transferHoldings', {static: false})
+        private transferHoldings: TransferHoldingsComponent;
+    @ViewChild('transferAlert', {static: false})
+        private transferAlert: AlertDialogComponent;
 
     holdingsTree: HoldingsTree;
 
@@ -158,6 +171,7 @@ export class HoldingsMaintenanceComponent implements OnInit {
         private store: ServerStoreService,
         private localStore: StoreService,
         private holdings: HoldingsService,
+        private broadcaster: BroadcastService,
         private anonCache: AnonCacheService
     ) {
         // Set some sane defaults before settings are loaded.
@@ -217,6 +231,13 @@ export class HoldingsMaintenanceComponent implements OnInit {
 
     ngOnInit() {
         this.initDone = true;
+
+        this.broadcaster.listen('eg.holdings.update').subscribe(data => {
+            if (data && data.records && data.records.includes(this.recordId)) {
+                this.refreshHoldings = true;
+                this.holdingsGrid.reload();
+            }
+        });
 
         // These are pre-cached via the catalog resolver.
         const settings = this.store.getItemBatchCached([
@@ -485,8 +506,8 @@ export class HoldingsMaintenanceComponent implements OnInit {
                 }, {
                     flesh: 3,
                     flesh_fields: {
-                        acp: ['status', 'location', 'circ_lib', 'parts',
-                            'age_protect', 'copy_alerts', 'latest_inventory'],
+                        acp: ['status', 'location', 'circ_lib', 'parts', 'notes',
+                            'tags', 'age_protect', 'copy_alerts', 'latest_inventory'],
                         acn: ['prefix', 'suffix', 'copies'],
                         acli: ['inventory_workstation']
                     }
@@ -583,6 +604,11 @@ export class HoldingsMaintenanceComponent implements OnInit {
 
         copyNode.target = copy;
         const stat = Number(copy.status().id());
+        copy._monograph_parts = '';
+        if (copy.parts().length > 0) {
+            copy._monograph_parts =
+                copy.parts().map(p => p.label()).join(',');
+        }
 
         if (stat === 1 /* checked out */ || stat === 16 /* long overdue */) {
             // Avoid looking up circs on items that are not checked out.
@@ -592,19 +618,34 @@ export class HoldingsMaintenanceComponent implements OnInit {
 
     // Which copies in the grid are selected.
     selectedCopyIds(rows: HoldingsEntry[], skipStatus?: number): number[] {
+        return this.selectedCopies(rows, skipStatus).map(c => Number(c.id()));
+    }
+
+    selectedVolIds(rows: HoldingsEntry[]): number[] {
+        return rows
+            .filter(r => Boolean(r.callNum))
+            .map(r => Number(r.callNum.id()));
+    }
+
+    selectedCopies(rows: HoldingsEntry[], skipStatus?: number): IdlObject[] {
         let copyRows = rows.filter(r => Boolean(r.copy)).map(r => r.copy);
         if (skipStatus) {
             copyRows = copyRows.filter(
                 c => Number(c.status().id()) !== Number(skipStatus));
         }
-        return copyRows.map(c => Number(c.id()));
+        return copyRows;
     }
 
     selectedCallNumIds(rows: HoldingsEntry[]): number[] {
+        return this.selectedCallNums(rows).map(cn => cn.id());
+    }
+
+    selectedCallNums(rows: HoldingsEntry[]): IdlObject[] {
         return rows
             .filter(r => r.treeNode.nodeType === 'callNum')
-            .map(r => Number(r.callNum.id()));
+            .map(r => r.callNum);
     }
+
 
     async showMarkDamagedDialog(rows: HoldingsEntry[]) {
         const copyIds = this.selectedCopyIds(rows, 14 /* ignore damaged */);
@@ -660,9 +701,7 @@ export class HoldingsMaintenanceComponent implements OnInit {
 
         // Action may only apply to a single org or call number row.
         const node = rows[0].treeNode;
-        if (node.nodeType === 'copy') {
-            return;
-        }
+        if (node.nodeType === 'copy') { return; }
 
         let orgId: number;
 
@@ -682,8 +721,11 @@ export class HoldingsMaintenanceComponent implements OnInit {
                 'eg.cat.transfer_target_vol', node.target.id());
         }
 
-        this.localStore.setLocalItem('eg.cat.transfer_target_record', this.recordId);
+        // Track lib and record to support transfering items from
+        // a different bib record to this record at the selected
+        // owning lib.
         this.localStore.setLocalItem('eg.cat.transfer_target_lib', orgId);
+        this.localStore.setLocalItem('eg.cat.transfer_target_record', this.recordId);
     }
 
     openAngJsWindow(path: string) {
@@ -725,16 +767,50 @@ export class HoldingsMaintenanceComponent implements OnInit {
         .then(key => this.openAngJsWindow(`cat/printlabels/${key}`));
     }
 
-    openHoldingEdit(rows: HoldingsEntry[], addCallNums: boolean, addCopies: boolean) {
+    openHoldingEdit(rows: HoldingsEntry[], hideVols: boolean, hideCopies: boolean) {
 
-        // The user may select a set of call numbers by selecting call number and/or
-        // copy rows.
+        // Avoid adding call number edit entries for call numbers
+        // that are already represented by selected items.
+
+        const copies = this.selectedCopies(rows);
+        const copyVols = copies.map(c => Number(c.call_number()));
+
+        const volIds = [];
+        this.selectedVolIds(rows).forEach(id => {
+            if (!copyVols.includes(id)) {
+                volIds.push(id);
+            }
+        });
+
+        this.holdings.spawnAddHoldingsUi(
+            this.recordId,
+            volIds,
+            null,
+            copies.map(c => Number(c.id())),
+            hideCopies,
+            hideVols
+        );
+    }
+
+    openHoldingAdd(rows: HoldingsEntry[], addCallNums: boolean, addCopies: boolean) {
+
+        // The user may select a set of call numbers by selecting call
+        // number and/or item rows.  Owning libs for new call numbers may
+        // also come from org unit row selection.
+        const orgs = {};
         const callNums = [];
         rows.forEach(r => {
             if (r.treeNode.nodeType === 'callNum') {
                 callNums.push(r.callNum);
+
             } else if (r.treeNode.nodeType === 'copy') {
                 callNums.push(r.treeNode.parentNode.target);
+
+            } else if (r.treeNode.nodeType === 'org') {
+                const org = r.treeNode.target;
+                if (org.ou_type().can_have_vols() === 't') {
+                    orgs[org.id()] = true;
+                }
             }
         });
 
@@ -748,21 +824,20 @@ export class HoldingsMaintenanceComponent implements OnInit {
         } else if (addCallNums) {
             const entries = [];
 
-            if (callNums.length > 0) {
+            // Use selected call numbers as basis for new call numbers.
+            callNums.forEach(v =>
+                entries.push({label: v.label(), owner: v.owning_lib()}));
 
-                // When adding call numbers, if any are selected in the grid,
-                // create call numbers that have the same label and owner.
-                callNums.forEach(v =>
-                    entries.push({label: v.label(), owner: v.owning_lib()}));
+            // Use selected org units as owning libs for new call numbers
+            Object.keys(orgs).forEach(id => entries.push({owner: id}));
 
-                } else {
-
-                // Otherwise create new call numbers from scratch.
+            if (entries.length === 0) {
+                // Otherwise create new call numbers for "here"
                 entries.push({owner: this.auth.user().ws_ou()});
             }
 
             this.holdings.spawnAddHoldingsUi(
-                this.recordId, null, entries, !addCopies);
+                this.recordId, null, entries, null, !addCopies);
         }
     }
 
@@ -901,4 +976,70 @@ export class HoldingsMaintenanceComponent implements OnInit {
             );
         }
     }
+
+    transferSelectedItems(rows: HoldingsEntry[]) {
+        if (rows.length === 0) { return; }
+
+        const cnId =
+            this.localStore.getLocalItem('eg.cat.transfer_target_vol');
+
+        const orgId =
+            this.localStore.getLocalItem('eg.cat.transfer_target_lib');
+
+        const recId =
+            this.localStore.getLocalItem('eg.cat.transfer_target_record');
+
+        let promise;
+
+        if (cnId) { // Direct call number transfer
+
+            const itemIds = this.selectedCopyIds(rows);
+            promise = this.transferItems.transferItems(itemIds, cnId);
+
+        } else if (orgId && recId) { // "Auto" transfer
+
+            // Clone the items to be modified to avoid any unexpected
+            // modifications and fesh the call numbers.
+            const items = this.idl.clone(this.selectedCopies(rows));
+            items.forEach(i => i.call_number(
+                this.treeNodeCache.callNum[i.call_number()].target));
+
+            console.log(items);
+            promise = this.transferItems.autoTransferItems(items, recId, orgId);
+
+        } else {
+            promise = this.transferAlert.open().toPromise();
+        }
+
+        promise.then(success => success ?  this.hardRefresh() : null);
+    }
+
+    transferSelectedHoldings(rows: HoldingsEntry[]) {
+        const callNums = this.selectedCallNums(rows);
+        if (callNums.length === 0) { return; }
+
+        const orgId =
+            this.localStore.getLocalItem('eg.cat.transfer_target_lib');
+
+        let recId =
+            this.localStore.getLocalItem('eg.cat.transfer_target_record');
+
+        if (orgId) {
+            // When transferring holdings (call numbers) between org units,
+            // limit transfers to within the current record.
+            recId = this.recordId;
+
+        } else if (!recId) {
+            // No destinations applied.
+            return this.transferAlert.open();
+        }
+
+        this.transferHoldings.targetRecId = recId;
+        this.transferHoldings.targetOrgId = orgId;
+        this.transferHoldings.callNums = callNums;
+
+        this.transferHoldings.transferHoldings()
+        .then(success => success ?  this.hardRefresh() : null);
+    }
 }
+

@@ -36,7 +36,7 @@ sub new {
     my $patron_id = shift;
     my %args = @_;
 
-    if ($key ne 'usr' and $key ne 'barcode') {
+    if ($key ne 'usr' and $key ne 'barcode' and $key ne 'usrname') {
         syslog("LOG_ERROR", "Patron (card) lookup requested by illegeal key '$key'");
         return undef;
     }
@@ -78,7 +78,7 @@ sub new {
 
     # in some cases, we don't need all of this data.  Only fetch the user + barcode
     $usr_flesh = {flesh => 1, flesh_fields => {au => ['card']}} if $args{slim_user};
-    
+
     my $user;
     if($key eq 'barcode') { # retrieve user by barcode
 
@@ -94,6 +94,8 @@ sub new {
 
         $user = $card->usr;
 
+    } elsif ($key eq 'usrname') {
+        $user = $e->search_actor_user([{usrname => $patron_id}, $usr_flesh])->[0];
     } else {
         $user = $e->retrieve_actor_user([$patron_id, $usr_flesh]);
     }
@@ -328,6 +330,23 @@ sub language {
     return '000'; # Unspecified
 }
 
+# method to check to see if charge_ok, renew_ok, and
+# lost_card should be coerced to return a status indicating
+# that the patron should be allowed to circulate; this
+# implements a workaround further described in
+# https://bugs.launchpad.net/evergreen/+bug/1853363
+sub patron_status_always_permit_loans_set {
+    my $self = shift;
+
+    my $login = OpenILS::SIP->login_account();
+
+    return (
+                OpenILS::SIP::to_bool($login->{patron_status_always_permit_loans}) //
+                OpenILS::SIP::to_bool(OpenILS::SIP->get_option_value('patron_status_always_permit_loans'))
+           ) ||
+           0;
+}
+
 # How much more detail do we need to check here?
 # sec: adding logic to return false if user is barred, has a circulation block
 # or an expired card
@@ -335,6 +354,8 @@ sub charge_ok {
     my $self = shift;
     my $u = $self->{user};
     my $circ_is_blocked = 0;
+
+    return 1 if $self->patron_status_always_permit_loans_set();
 
     # compute expiration date for borrowing privileges
     my $expire = DateTime::Format::ISO8601->new->parse_datetime(clean_ISO8601($u->expire_date));
@@ -354,6 +375,8 @@ sub renew_ok {
     my $self = shift;
     my $u = $self->{user};
     my $renew_is_blocked = 0;
+
+    return 1 if $self->patron_status_always_permit_loans_set();
 
     # compute expiration date for borrowing privileges
     my $expire = DateTime::Format::ISO8601->new->parse_datetime(clean_ISO8601($u->expire_date));
@@ -398,6 +421,9 @@ sub hold_ok {
 # return true if the card provided is marked as lost
 sub card_lost {
     my $self = shift;
+
+    return 0 if $self->patron_status_always_permit_loans_set();
+
     return $self->{user}->card->active eq 'f';
 }
 

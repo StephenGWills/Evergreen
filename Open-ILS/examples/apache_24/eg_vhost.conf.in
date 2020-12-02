@@ -666,11 +666,21 @@ RewriteRule ^/openurl$ ${openurl:%1} [NE,PT]
     #PerlAddVar OILSWebLocale "fr_ca"
     #PerlAddVar OILSWebLocale "@localstatedir@/data/locale/opac/fr-CA.po"
 
+    # If you're using the Bootstrap OPAC, you should instead set the locales
+    # like this:
+    #PerlAddVar OILSWebLocale "en"
+    #PerlAddVar OILSWebLocale "@localstatedir@/data/locale/bootstrap-opac/messages.en.po"
+    #PerlAddVar OILSWebLocale "en_ca"
+    #PerlAddVar OILSWebLocale "@localstatedir@/data/locale/bootstrap-opac/en-CA.po"
+    #PerlAddVar OILSWebLocale "fr_ca"
+    #PerlAddVar OILSWebLocale "@localstatedir@/data/locale/bootstrap-opac/fr-CA.po"
+
     # Set the default locale: defaults to en-US
     #PerlAddVar OILSWebDefaultLocale "fr_ca"
     
     # Templates will be loaded from the following paths in reverse order.
     PerlAddVar OILSWebTemplatePath "@localstatedir@/templates"
+    #PerlAddVar OILSWebTemplatePath "@localstatedir@/templates-bootstrap" #Uncomment this line to use the new bootstrap OPAC
     #PerlAddVar OILSWebTemplatePath "@localstatedir@/templates_localskin"
 
     #-------------------------------------------------
@@ -856,6 +866,78 @@ RewriteRule ^/openurl$ ${openurl:%1} [NE,PT]
     PerlSetVar OILSRemoteAuthClientPassword "demo123"
 </Location>
 
+<Location /api/ezproxy>
+    SetHandler perl-script
+    PerlHandler OpenILS::WWW::RemoteAuth
+    Options +ExecCGI
+
+    # access restricted to localhost by default; since this module provides no
+    # client authentiation, restricting access by IP or other means is stongly
+    # recommended
+    Require local
+
+    # remoteauth profile name
+    PerlSetVar OILSRemoteAuthProfile "EZProxyCGI"
+    # Perl module for processing requests
+    PerlSetVar OILSRemoteAuthHandler "OpenILS::WWW::RemoteAuth::EZProxyCGI"
+
+    # staff username/password for config lookup and patron retrieval
+    PerlSetVar OILSRemoteAuthClientUsername "admin"
+    PerlSetVar OILSRemoteAuthClientPassword "demo123"
+
+    # Location of TT2 templates for EZProxy login form and error pages.
+    # Templates will be loaded from the following paths in reverse order.
+    PerlAddVar OILSRemoteAuthTemplatePath "@localstatedir@/templates/remoteauth/ezproxycgi"
+    #PerlAddVar OILSRemoteAuthTemplatePath "@localstatedir@/templates_localskin/remoteauth/ezproxycgi"
+
+    # Locale (defaults to en_us)
+    #PerlAddVar OILSRemoteAuthLocale "en_us"
+
+    # Base URI of your EZProxy server; be sure there is no trailing slash
+    PerlSetVar OILSRemoteAuthEZProxyBaseURI "http://example.com/ezproxy"
+
+    # shared secret used to generate EZProxy authentication ticket
+    # This should be the same as the value in the MD5 line of your EZProxy users.txt configuration
+    # This default value is not suitable for production!
+    PerlSetVar OILSRemoteAuthEZProxySecret "secret"
+</Location>
+
+<Location /api/patronapi>
+    SetHandler perl-script
+    PerlHandler OpenILS::WWW::RemoteAuth
+    Options +ExecCGI
+
+    # access restricted to localhost by default; since this module provides no
+    # client authentication and can be configured to return detailed personal
+    # information, restricting access by IP or other means is stongly
+    # recommended
+    Require local
+
+    # remoteauth profile name
+    PerlSetVar OILSRemoteAuthProfile "PatronAPI"
+    # Perl module for processing requests
+    PerlSetVar OILSRemoteAuthHandler "OpenILS::WWW::RemoteAuth::PatronAPI"
+
+    # staff username/password for config lookup and patron retrieval
+    PerlSetVar OILSRemoteAuthClientUsername "admin"
+    PerlSetVar OILSRemoteAuthClientPassword "demo123"
+
+    # Location of TT2 templates for PatronAPI responses.
+    # Templates will be loaded from the following paths in reverse order.
+    PerlAddVar OILSRemoteAuthTemplatePath "@localstatedir@/templates/remoteauth/patronapi"
+    #PerlAddVar OILSRemoteAuthTemplatePath "@localstatedir@/templates_localskin/remoteauth/patronapi"
+
+    # Locale (defaults to en_us)
+    #PerlAddVar OILSRemoteAuthLocale "en_us"
+
+    # set to "true" to allow retrieval of detailed patron information
+    # without patron authorization
+    PerlSetVar OILSRemoteAuthPatronAPIAllowDump "false"
+
+    # identifier type for patron information requests (/dump)
+    # permitted values: "barcode" (default), "username"
+    #PerlSetVar OILSRemoteAuthPatronAPIIDType "barcode"
+</Location>
 
 # Uncomment the following to force SSL for everything. Note that this defeats caching
 # and you will suffer a performance hit.
@@ -885,9 +967,23 @@ RewriteRule ^/eg2/(.*) https://%{HTTP_HOST}/eg2/en-US/$1 [R=307,L]
 # This is the only required configuration when only using the default locale.
 <Directory "@localstatedir@/web/eg2/en-US">
     FallbackResource /eg2/en-US/index.html
+    <Files "index.html">
+      <IfModule mod_headers.c>
+        Header set Cache-Control "no-cache, no-store, must-revalidate"
+        Header set Pragma "no-cache"
+        Header set Expires 0
+      </IfModule>
+    </Files>
 </Directory>
 
 # fr-CA build
 #<Directory "@localstatedir@/web/eg2/fr-CA">
 #    FallbackResource /eg2/fr-CA/index.html
+#    <Files "index.html">
+#      <IfModule mod_headers.c>
+#        Header set Cache-Control "no-cache, no-store, must-revalidate"
+#        Header set Pragma "no-cache"
+#        Header set Expires 0
+#      </IfModule>
+#    </Files>
 #</Directory>

@@ -568,20 +568,27 @@ function($scope,  $q , $routeParams , $timeout , $window , $uibModal , bucketSvc
         $scope.detachCopies(copies);
     }
 
-    $scope.spawnHoldingsEdit = function (copies) {
+    $scope.spawnHoldingsEdit = function() {
+        $scope.spawnEdit(true, false);
+    }
+
+    $scope.spawnCallNumberEdit = function() {
+        $scope.spawnEdit(false, true);
+    }
+
+    $scope.spawnEdit = function(hide_vols,hide_copies) {
         var cp_list = []
         angular.forEach($scope.gridControls.selectedItems(), function (i) {
             cp_list.push(i.id);
-        })
-
+        });
         egCore.net.request(
             'open-ils.actor',
             'open-ils.actor.anon_cache.set_value',
             null, 'edit-these-copies', {
                 record_id: 0, // false-y value for record_id disables record summary
                 copies: cp_list,
-                hide_vols : true,
-                hide_copies : false
+                hide_vols : hide_vols,
+                hide_copies : hide_copies
             }
         ).then(function(key) {
             if (key) {
@@ -613,6 +620,15 @@ function($scope,  $q , $routeParams , $timeout , $window , $uibModal , bucketSvc
                 alert('Could not create anonymous cache key!');
             }
         });
+    }
+
+    $scope.showItems = function() {
+        var cp_list = []
+        angular.forEach($scope.gridControls.selectedItems(), function (i) {
+            cp_list.push(i.id);
+        })
+        var url = egCore.env.basePath + '/cat/item/search/' + cp_list.join();
+        $timeout(function() { $window.open(url, '_blank') });
     }
 
     $scope.requestItems = function() {

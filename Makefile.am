@@ -15,6 +15,7 @@ export ETCDIR=@sysconfdir@
 export WEBDIR=@localstatedir@/web
 export CGIDIR=@localstatedir@/cgi-bin
 export TEMPLATEDIR=@localstatedir@/templates
+export BOOTSTRAPTEMPLATEDIR=@localstatedir@/templates-bootstrap
 export UPDATESDIR=@localstatedir@/updates
 
 export datadir=@localstatedir@/data
@@ -25,6 +26,7 @@ export PID=@localstatedir@/run
 export LOG=@localstatedir@/log
 export PERL_BASE=@PERL_BASE@
 
+ACLOCAL_AMFLAGS = -I m4
 
 
 # Derived from autoconf:

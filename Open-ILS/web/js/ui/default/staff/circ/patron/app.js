@@ -327,6 +327,7 @@ function($scope,  $q , $location , $filter , egCore , egNet , egUser , egAlertDi
     $scope.summary_stat_cats = function() { return patronSvc.summary_stat_cats }
     $scope.hasAlerts = function() { return patronSvc.hasAlerts }
     $scope.isPatronExpired = function() { return patronSvc.patronExpired }
+    $scope.doesPatronExpireSoon = function() { return patronSvc.patronExpiresSoon }
 
     $scope.print_address = function(addr) {
         egCore.print.print({
@@ -473,7 +474,8 @@ function($scope , $location , egCore , egConfirmDialog , egUser , patronSvc , $u
         $scope.bcNotFound = null;
         $scope.optInRestricted = false;
         if (!args.barcode) return;
-        args.barcode = args.barcode.replace(/\s/g,'');
+        args.barcode = args.barcode.replace(/^\s/g,'');
+        args.barcode = args.barcode.replace(/\s$/g,'');
         // blur so next time it's set to true it will re-apply select()
         $scope.selectMe = false;
 
@@ -775,7 +777,7 @@ function($scope , $q , $routeParams,  egCore , $uibModal , patronSvc , egCirc) {
         setSort : function() {
             return ['set_date'];
         },
-        setQuery : function() {
+        watchQuery : function() {
             return {
                 usr : usr_id, 
                 org_unit : org_ids,

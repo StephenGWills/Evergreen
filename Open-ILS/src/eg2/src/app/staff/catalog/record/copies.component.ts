@@ -7,6 +7,8 @@ import {Pager} from '@eg/share/util/pager';
 import {OrgService} from '@eg/core/org.service';
 import {GridDataSource, GridColumn, GridCellTextGenerator} from '@eg/share/grid/grid';
 import {GridComponent} from '@eg/share/grid/grid.component';
+import {BroadcastService} from '@eg/share/util/broadcast.service';
+import {CourseService} from '@eg/staff/share/course.service';
 
 @Component({
   selector: 'eg-catalog-copies',
@@ -16,6 +18,7 @@ export class CopiesComponent implements OnInit {
 
     recId: number;
     initDone = false;
+    usingCourseModule = false;
     gridDataSource: GridDataSource;
     copyContext: any; // grid context
     @ViewChild('copyGrid', { static: true }) copyGrid: GridComponent;
@@ -32,15 +35,20 @@ export class CopiesComponent implements OnInit {
     cellTextGenerator: GridCellTextGenerator;
 
     constructor(
+        private course: CourseService,
         private net: NetService,
         private org: OrgService,
         private staffCat: StaffCatalogService,
+        private broadcaster: BroadcastService
     ) {
         this.gridDataSource = new GridDataSource();
     }
 
     ngOnInit() {
         this.initDone = true;
+        this.course.isOptedIn().then(res => {
+            this.usingCourseModule = res;
+        });
 
         this.gridDataSource.getRows = (pager: Pager, sort: any[]) => {
             // sorting not currently supported
@@ -61,10 +69,12 @@ export class CopiesComponent implements OnInit {
             holdable: row => this.copyContext.holdable(row),
             barcode: row => row.barcode
         };
-    }
 
-    collectData() {
-        if (!this.recId) { return; }
+        this.broadcaster.listen('eg.holdings.update').subscribe(data => {
+            if (data && data.records && data.records.includes(this.recId)) {
+                this.copyGrid.reload();
+            }
+        });
     }
 
     orgName(orgId: number): string {
@@ -90,6 +100,13 @@ export class CopiesComponent implements OnInit {
             pager.offset,
             this.staffCat.prefOrg ? this.staffCat.prefOrg.id() : null
         ).pipe(map(copy => {
+            this.org.settings('circ.course_materials_opt_in').then(res => {
+                if (res['circ.course_materials_opt_in']) {
+                    this.course.getCoursesFromMaterial(copy.id).then(courseList => {
+                        copy._courses = courseList;
+                    });
+                }
+            });
             copy.active_date = copy.active_date || copy.create_date;
             return copy;
         }));

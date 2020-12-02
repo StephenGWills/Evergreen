@@ -762,6 +762,9 @@
 	<event code='1715' textcode='HOLD_SUSPEND_AFTER_CAPTURE'>
 		<desc xml:lang="en-US">Attempt to suspend a hold after it has been captured.</desc>
 	</event>
+	<event code='1716' textcode='MONEY_DEBIT_CARD_PAYMENT_NOT_FOUND'>
+		<desc xml:lang='en-US'>The requested money_debit_card_payment was not found</desc>
+	</event>
 
 	<event code='1900' textcode='URL_VERIFY_NOT_SESSION_CREATOR'>
 		<desc xml:lang="en-US">You did not create this URL Verify session, so you cannot change it.  You may be able to clone it.</desc>
@@ -935,6 +938,15 @@
 	<event code='7029' textcode='MAX_AUTO_RENEWALS_REACHED'>
 		<desc xml:lang="en-US">Circulation has no more auto-renewals remaining</desc>
 	</event>
+	<event code='7030' textcode='CURBSIDE_NOT_ALLOWED'>
+		<desc xml:lang="en-US">Curbside pickup is not enabled for this location</desc>
+	</event>
+	<event code='7031' textcode='CURBSIDE_MAX_FOR_TIME'>
+		<desc xml:lang="en-US">Maximum scheduled curbside pickups at the requested time</desc>
+	</event>
+	<event code='7032' textcode='CURBSIDE_EXISTS'>
+		<desc xml:lang="en-US">A scheduled, unfilled curbside request already exists</desc>
+	</event>
 
 
 	<!-- ================================================================ -->
@@ -1073,6 +1085,12 @@
     </event>
     <event code='12002' textcode='ITEM_TO_MARK_LAST_HOLD_COPY'>
       <desc xml:lang="en-US">The item to be marked is the last possible target for a hold.</desc>
+    </event>
+
+	<!-- ================================================================ -->
+
+    <event code='12003' textcode='TITLE_HAS_HOLDS'>
+      <desc xml:lang="en-US">This title has hold requests on it that will be canceled if they are not transferred.</desc>
     </event>
 </ils_events>
 

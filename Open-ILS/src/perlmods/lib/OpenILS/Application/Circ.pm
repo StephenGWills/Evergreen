@@ -773,6 +773,7 @@ sub create_in_house_use {
         }
 
         $ihu->staff($e->requestor->id);
+        $ihu->workstation($e->requestor->wsid);
         $ihu->org_unit($org);
         $ihu->use_time($use_time);
 
@@ -1938,6 +1939,7 @@ sub user_payments_list {
                         'xact',
                         'cash_payment',
                         'credit_card_payment',
+                        'debit_card_payment',
                         'credit_payment',
                         'check_payment',
                         'work_payment',
