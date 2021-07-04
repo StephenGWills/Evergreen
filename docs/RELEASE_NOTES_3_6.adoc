@@ -2,6 +2,398 @@
 :toc:
 :numbered:
 
+== Evergreen  3.6.4 ==
+
+This release contains bug fixes improving on Evergreen 3.6.3.
+
+=== Upgrade notes ===
+
+The addition of the Angular Staff Catalog surfaced a double-encoding issue
+with redirects in certain Apache versions. This caused searches for multiple
+words to have %20 in place of spaces, almost certainly resulting in 0 results.
+
+In order to apply this fix, change the Angular redirects in eg_vhost.conf from
+
+ RewriteRule ^/eg2/(.*) https://%{HTTP_HOST}/eg2/en-US/$1 [R=307,L]
+
+to
+
+ RewriteRule ^/eg2/(.*) https://%{HTTP_HOST}/eg2/en-US/$1 [NE,R=307,L]
+
+
+=== Bug Fixes ===
+
+==== Acquisitions ====
+
+* Acq PO Search cancel reason column shows description (https://bugs.launchpad.net/bugs/1906825[Bug 1906825])
+* Date columns in Acq Search now also show time (https://bugs.launchpad.net/bugs/1912097[Bug 1912097])
+
+==== Administration ====
+
+* Fixes an issue with editing carousels (https://bugs.launchpad.net/bugs/1879769[Bug 1879769])
+* Carousel admin grid now has a link to edit the relevant bucket (https://bugs.launchpad.net/bugs/1901893[Bug 1901893])
+* The Active Column in SMS Carrier administration now displays properly (https://bugs.launchpad.net/bugs/1873539[Bug 1873539])
+* Fixes upgrade script for Enhanced Print/Email (https://bugs.launchpad.net/bugs/1905091[Bug 1905091])
+* Cleans up numerous Perl warnings in logs (https://bugs.launchpad.net/bugs/1895660[Bug 1895660])
+
+
+==== Catalog ====
+
+* Fixes an issue displaying highlighting in traditional and bootstrap catalogue (https://bugs.launchpad.net/bugs/1923225[Bug 1923225])
+* Fixes an issue displaying works with the word "hidden" in the title (https://bugs.launchpad.net/bugs/1930933[Bug 1930933])
+* Bootstrap OPAC: Simple Selector for Lang now works in Advanced Search (https://bugs.launchpad.net/bugs/1920042[Bug 1920042])
+* Bootstrap OPAC: My account summary now displays ebook references according to config file (https://bugs.launchpad.net/bugs/1910288[Bug 1910288])
+* Bootstrap OPAC: Item tags no longer display as separate copies on an x-small screen (https://bugs.launchpad.net/bugs/1916936[Bug 1916936])
+* Fixes nesting issues on the Bootstrap OPAC Record Detail Page (https://bugs.launchpad.net/bugs/1901710[Bug 1901710])
+* Opac SMS and Carrier Fields display according to OU Setting when Editing a Hold (https://bugs.launchpad.net/bugs/1902302[Bug 1902302])
+* Better controls for collapsing and expanding the staff catalog search form (https://bugs.launchpad.net/bugs/1913338[Bug 1913338])
+
+==== Cataloging ====
+
+* Angular Catalog: "Edit" link no longer ignores UPDATE_COPY perm (https://bugs.launchpad.net/bugs/1920815[Bug 1920815])
+* Angular catalog: fixes an issue with metarecord search (https://bugs.launchpad.net/bugs/1930088[Bug 1930088])
+* Angular staff catalog now displays e-resource links (https://bugs.launchpad.net/bugs/1881607[Bug 1881607])
+* Record bucket Batch Edit now navigates to the Angular batch editor (https://bugs.launchpad.net/bugs/1926310[Bug 1926310])
+* Angular Catalog: Shelving locations assigned to the top level OU now display in list (https://bugs.launchpad.net/bugs/1927527[Bug 1927527])
+* Add to Carousel added back to the Other Actions menu in the Bib Record (https://bugs.launchpad.net/bugs/1922120[Bug 1922120])
+* Makes terminology more consistent in Angular Catalog (https://bugs.launchpad.net/bugs/1925725[Bug 1925725])
+
+
+==== Circulation ====
+
+* Preferred Name is now the prominent display name (https://bugs.launchpad.net/bugs/1924185[Bug 1924185])
+* Unchanged workstation settings are no longer re-applied on every checkin (https://bugs.launchpad.net/bugs/1918362[Bug 1918362])
+* Adds accessible field labels in patron search and edit (https://bugs.launchpad.net/bugs/1615800[Bug 1615800])
+* Fixes an issue with the embedded "Place a hold" catalog in the checkout interface (https://bugs.launchpad.net/bugs/1887876[Bug 1887876])
+* Angular Catalog: Hold status in View Holds is now saved (https://bugs.launchpad.net/bugs/1917495[Bug 1917495])
+* Angular Staff Catalog: Hold Pickup Library no longer sometimes empty (https://bugs.launchpad.net/bugs/1917944[Bug 1917944])
+* Fixes an issue with the Angular catalog view holds sort by patron barcode (https://bugs.launchpad.net/bugs/1928684[Bug 1928684])
+* Staff catalog hold detail page now supports hold notes/notifications (https://bugs.launchpad.net/bugs/1910145[Bug 1910145])
+
+==== Client ====
+
+* Angular grid column field picker has a better sort order (https://bugs.launchpad.net/bugs/1891699[Bug 1891699])
+* Angular grids now support shift-click multi-row selection (https://bugs.launchpad.net/bugs/1911238[Bug 1911238])
+* Fixes an issue with multi-word queries in the splash page catalog search (https://bugs.launchpad.net/bugs/1892435[Bug 1892435])
+
+==== Database ====
+
+* Evergreen now uses the builtin array_remove() function rather than its own custom version (https://bugs.launchpad.net/bugs/1778955[Bug 1778955])
+* Adds seed data for the eg.orgselect.hopeless.wide_holds setting (https://bugs.launchpad.net/bugs/1895738[Bug 1895738])
+
+
+==== Documentation ====
+
+* Adds documentation on how to contribute Documentation (https://bugs.launchpad.net/bugs/1927534[Bug 1927534])
+* Adds IDL acronym to the glossary (https://bugs.launchpad.net/bugs/1857917[Bug 1857917])
+* Adds documentation on how to use the browser client efficiently (https://bugs.launchpad.net/bugs/1250528[Bug 1250528] and https://bugs.launchpad.net/bugs/1751146[Bug 1751146])
+
+
+
+
+=== Acknowledgements ===
+
+We would like to thank the following individuals who contributed code,
+testing and documentation patches to the 3.6.4 point release of Evergreen:
+
+* Jason Boyer
+* Dan Briem
+* Galen Charlton
+* Garry Collum
+* Jeff Davis
+* Bill Erickson
+* Jason Etheridge
+* Blake Graham Henderson
+* Rogan Hamby
+* Elaine Hardy
+* Kyle Huckins
+* Tiffany Little
+* Mary Llewellyn
+* Terran McCanna
+* Gina Monti
+* Michele Morgan
+* Andrea Buntz Neiman
+* Mike Risher
+* Mike Rylander
+* Jane Sandberg
+* Chris Sharp
+* Chrisy Schroth
+* Jason Stephenson
+* Stephen Wills
+
+== Evergreen  3.6.3 ==
+
+This release contains bug fixes improving on Evergreen 3.6.2,
+including a security bug fix.
+
+=== Bug Fixes ===
+
+==== Security ====
+
+* Fixes an XSS bug in MARC fields that are rendered as HTML (https://bugs.launchpad.net/bugs/1902965[Bug 1902965])
+
+
+==== Administration ====
+
+* Angular admin pages "Library" scope (https://bugs.launchpad.net/bugs/1873322[Bug 1873322])
+* No Access to Composite Attribute Entry Definitions from MARC Coded Value Maps (https://bugs.launchpad.net/bugs/1843969[Bug 1843969])
+* Use consistent terminology in Local Admin Interfaces (https://bugs.launchpad.net/bugs/1871510[Bug 1871510])
+
+
+==== Circulation ====
+
+* In house use: it would be nice if the item barcode column linked to item status (https://bugs.launchpad.net/bugs/1859513[Bug 1859513])
+
+==== Client ====
+
+* Angular grids: interval columns are not filterable (https://bugs.launchpad.net/bugs/1848579[Bug 1848579])
+* Angular Staff Client Hamburger Menu no longer clipped off screen (https://bugs.launchpad.net/bugs/1915323[Bug 1915323])
+
+==== Course materials ====
+
+* Display course name when editing reserve item (https://bugs.launchpad.net/bugs/1907977[Bug 1907977])
+* "Instructor" search/browse option does not always display in OPAC (https://bugs.launchpad.net/bugs/1907979[Bug 1907979])
+
+==== OPAC ====
+
+* Bootstrap OPAC: add support for Stripe v3 (Elements) (https://bugs.launchpad.net/bugs/1895679[Bug 1895679])
+* Bootstrap OPAC: Pagination on copy table now works (https://bugs.launchpad.net/bugs/1916085[Bug 1916085])
+* Terms Governing Use and Reproduction Note Displays Twice in Record Details (https://bugs.launchpad.net/bugs/1917804[Bug 1917804])
+* Email now displays when editing hold prefs in OPAC (https://bugs.launchpad.net/bugs/1908616[Bug 1908616])
+* Bootstrap OPAC:  Call number on search results page (https://bugs.launchpad.net/bugs/1916904[Bug 1916904])
+
+==== Performance ====
+
+* Search indexes now use GIN by default (https://bugs.launchpad.net/bugs/1703658[Bug 1703658])
+* Record bucket 'Add To Bucket' actions should be batched or serialized. (https://bugs.launchpad.net/bugs/1913458[Bug 1913458])
+
+==== Staff catalog ====
+
+* Angular Catalog: Part column no longer missing from Item table (https://bugs.launchpad.net/bugs/1899405[Bug 1899405])
+* Publication information in angular search results now displays from tag 260 or 264 (https://bugs.launchpad.net/bugs/1896840[Bug 1896840])
+* Angular catalog can now sort browse result record lists (https://bugs.launchpad.net/bugs/1908444[Bug 1908444])
+* No Pagination Navigation at the Bottom of a Catalog Search (https://bugs.launchpad.net/bugs/1912380[Bug 1912380])
+
+=== Upgrade Notes ===
+
+A partial reingest is required to extract the new publisher data for display.
+This query may be long-running.
+
+[source,sql]
+--------------------------------------------------------------------------
+WITH affected_bibs AS (
+    SELECT DISTINCT(bre.id) AS id
+    FROM biblio.record_entry bre
+    JOIN metabib.real_full_rec mrfr
+    ON (mrfr.record = bre.id AND mrfr.tag = '264')
+    WHERE NOT bre.deleted
+)
+SELECT metabib.reingest_metabib_field_entries(id, TRUE, FALSE, TRUE, TRUE)
+FROM affected_bibs;
+--------------------------------------------------------------------------
+
+
+
+=== Acknowledgements ===
+
+We would like to thank the following individuals who contributed code,
+testing and documentation patches to the 3.6.3 point release of Evergreen:
+
+
+* Jason Boyer
+* Dan Briem
+* Galen Charlton
+* Garry Collum
+* Jeff Davis
+* Bill Erickson
+* Tiffany Little
+* Terran McCanna
+* Michele Morgan
+* Jennifer Pringle
+* Mike Risher
+* Jane Sandberg
+* Chris Sharp
+* Jason Stephenson
+* Beth Willis
+
+== Evergreen 3.6.2 ==
+
+
+This release contains bug fixes improving on Evergreen 3.6.1,
+including a security bug fix.
+
+=== Bug Fixes ===
+
+==== Security ====
+
+* Fix an issue where `open-ils.pcrud` backends could crash with
+a segmentation fault under certain conditions that could be invoked
+by an external attacker, thus leading to a potential denial
+of service attack.
+
+==== Staff Interface ====
+* Expert Search in the staff interface now respects the search library.
+(https://bugs.launchpad.net/evergreen/+bug/1468132[Bug 1468132])
+* The Items Out page is now less prone to cause `open-ils.actor` backend
+exhaustion. It now also displays a progress bar while loading.
+(https://bugs.launchpad.net/evergreen/+bug/1913811[Bug 1913811])
+* Grids in the staff interface no longer require that a row
+be selected in order to activate a grid action that doesn't
+logically require that at least one row be selected.
+(https://bugs.launchpad.net/evergreen/+bug/1670457[Bug 1670457])
+* The display of total amounted billed, owed, and paid on the patron
+Bills page now reflects just open bills with a non-zero balance, fixing
+an issue where the totals could include paid billings for transactions
+that are still open.
+(https://bugs.launchpad.net/evergreen/+bug/1772955[Bug 1772955])
+* The pending patron interface now respects the library setting whether
+to set the patron's initial password to the last four digits of their
+phone number.
+(https://bugs.launchpad.net/evergreen/+bug/1887852[Bug 1887852])
+* Several interfaces, including Mark Missing, adding patrons to a bucket
+from a search, and applying a default item status now use batch
+API calls for better efficiency.
+(https://bugs.launchpad.net/evergreen/+bug/1896285[Bug 1896285])
+* Fix an issue where the holdings editor would not close its window
+when the Save & Exit button was clicked.
+(https://bugs.launchpad.net/evergreen/+bug/1913219[Bug 1913219])
+* Fix an issue where a double barcode scan could create a precat
+item without giving the staff member the chance to review the
+form before submitting it.
+(https://bugs.launchpad.net/evergreen/+bug/1778522[Bug 1778522])
+* Fix an issue preventing the staff interface from being used
+on various Android and iOS devices.
+(https://bugs.launchpad.net/evergreen/+bug/1901760[Bug 1901760])
+* Fix an issue where the report editor could supply the wrong
+kind of input for an aggregate filter.
+(https://bugs.launchpad.net/evergreen/+bug/1858114[Bug 1858114])
+* The staff interfaces now warns if the user attempts to delete
+a bib record that has active holds on it.
+(https://bugs.launchpad.net/evergreen/+bug/1398107[Bug 1398107])
+* Expired staff accounts can no longer log into the staff interface
+(https://bugs.launchpad.net/evergreen/+bug/1474029[Bug 1474029])
+* Most Angular administration pages now include grid filters
+(https://bugs.launchpad.net/evergreen/+bug/1846042[Bug 1846042])
+* The grid header in most Angular admin interfaces is now sticky
+(https://bugs.launchpad.net/evergreen/+bug/1855457[Bug 1855457])
+* The Angular staff catalog now supports more easily placing multiple
+holds on the same target
+(https://bugs.launchpad.net/evergreen/+bug/1889128[Bug 1889128])
+* The Angular staff catalog now respects the 'Not a Pickup Library'
+setting
+(https://bugs.launchpad.net/evergreen/+bug/1908743[Bug 1908743])
+* Fix an issue where the staff catalog hold request form was not
+registering a change of pickup library.
+(https://bugs.launchpad.net/evergreen/+bug/1911031[Bug 1911031])
+* In some cases, an upgraded database would fail to honor a request
+to delete an item tag. This is now fixed.
+(https://bugs.launchpad.net/evergreen/+bug/1786100[Bug 1786100])
+* The order of fields in various staff interface record editing
+forms has been improved.
+(https://bugs.launchpad.net/evergreen/+bug/1857351[Bug 1857351])
+* Fix an issue where the Angular MARC editor would sometimes fail
+to display fields.
+(https://bugs.launchpad.net/evergreen/+bug/1907115[Bug 1907115])
+* Fix the retrieve last bib record feature in the Angular staff
+catalog
+(https://bugs.launchpad.net/evergreen/+bug/1907286[Bug 1907286])
+* Improve the placement of the 'Add Materials' button in the Course
+Material interface
+(https://bugs.launchpad.net/evergreen/+bug/1907923[Bug 1907923])
+* Catalog links in the line item manager now link to the Angular
+staff catalog
+(https://bugs.launchpad.net/evergreen/+bug/1908420[Bug 1908420])
+* Fix an issue where MARC Batch Edit's Go button could be disabled
+during a CSV file upload.
+(https://bugs.launchpad.net/evergreen/+bug/1910409[Bug 1910409])
+* Improve the labeling of publication date sort option in the
+Angular staff catalog
+(https://bugs.launchpad.net/evergreen/+bug/1908724[Bug 1908724])
+* Fix sorting of the surveys administration grid.
+(https://bugs.launchpad.net/evergreen/+bug/1908763[Bug 1908763])
+* Saving a record created via 'Create New MARC Record' now directs
+the user to the Angular staff catalog.
+(https://bugs.launchpad.net/evergreen/+bug/1914630[Bug 1914630])
+* Fix a couple typos.
+
+==== Public Catalog ====
+
+* Fix an issue where titles could run together when viewing a
+carousel with a mobile browser.
+(https://bugs.launchpad.net/evergreen/+bug/1868147[Bug 1868147])
+* The order that items in a carousel display in is now more
+predictable. For example, for 'Top Circulated Items' carousels,
+the order is from most circulated to least circulated.
+(https://bugs.launchpad.net/evergreen/+bug/1866406[Bug 1866406])
+* Carousels no longer display deleted items.
+(https://bugs.launchpad.net/evergreen/+bug/1836254[Bug 1836254])
+* CGI parameters in the public catalog are now consistently forced
+to be separated by ampersands rather than semicolons.
+(https://bugs.launchpad.net/evergreen/+bug/1687545[Bug 1687545]) and
+(https://bugs.launchpad.net/evergreen/+bug/1914116[Bug 1914116])
+
+==== Public Catalog (Bootstrap theme) ====
+
+* The Bootstrap public catalog now allows patrons to update
+hold notification preferences.
+(https://bugs.launchpad.net/evergreen/+bug/1902265[Bug 1902265])
+* Fix an issue where email and phone number notification information
+was not saved when placing a hold.
+(https://bugs.launchpad.net/evergreen/+bug/1903424[Bug 1903424])
+* Suspending a hold at the time of placement now works in the Bootstrap
+public catalog.
+(https://bugs.launchpad.net/evergreen/+bug/1903594[Bug 1903594])
+* Add the Type filter to the Bootstrap public catalog's Advanced
+Search page
+(https://bugs.launchpad.net/evergreen/+bug/1908298[Bug 1908298])
+* The Bootstrap public catalog now includes the record emailing
+and printing enhancements added in 3.6.0.
+(https://bugs.launchpad.net/evergreen/+bug/1895676[Bug 1895676])
+* The Bootstrap public catalog is now implements course
+materials search and display.
+(https://bugs.launchpad.net/evergreen/+bug/1895678[Bug 1895678])
+* Carousels in the Bootstrap public catalog now link to their titles.
+(https://bugs.launchpad.net/evergreen/+bug/1908113[Bug 1908113])
+* Fix an issue with saving list notes in the Bootstrap public catalog.
+(https://bugs.launchpad.net/evergreen/+bug/1908766[Bug 1908766])
+* The My Account circulation history display now includes the
+title and author of loans of precat items.
+(https://bugs.launchpad.net/evergreen/+bug/1910138[Bug 1910138])
+* Fix an issue with adding a basket to an existing list.
+(https://bugs.launchpad.net/evergreen/+bug/1907866[Bug 1907866])
+
+==== Administration ====
+
+* The EDI Webrick installer now works on Ubuntu 18.04
+(https://bugs.launchpad.net/evergreen/+bug/1901900[Bug 1901900])
+
+=== Acknowledgements ===
+
+We would like to thank the following individuals who contributed code,
+testing and documentation patches to the 3.6.1 point release of Evergreen:
+
+* John Amundson
+* Zavier Banks
+* Jason Boyer
+* Dan Briem
+* Galen Charlton
+* Garry Collum
+* Jeff Davis
+* Bill Erickson
+* Ruth Frasur
+* Blake Graham-Henderson
+* Rogan Hamby
+* Elaine Hardy
+* Angela Kilsdonk
+* Tiffany Little
+* Terran McCanna
+* Michele Morgan
+* Jane Sandberg
+* Mike Risher
+* Mike Rylander
+* Chris Sharp
+* Jason Stephenson
+
 == Evergreen 3.6.1 ==
 
 This release contains bug fixes improving on Evergreen 3.6.0.
@@ -314,7 +706,7 @@ the web staff client template `circ/patron/t_edit.tt2`.
 ===== New Action/Trigger reactor for 3rd party signaling =====
 
 This new Action/Trigger reactor module allows an Evergreen administrator to
-create event defintions that use HTTP (or HTTPS) to contact external services
+create event definitions that use HTTP (or HTTPS) to contact external services
 and let them know that something has happened in Evergreen.
 
 For instance, a discovery layer can be informed when a bib record is updated

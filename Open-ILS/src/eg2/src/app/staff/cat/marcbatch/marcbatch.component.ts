@@ -56,6 +56,18 @@ export class MarcBatchComponent implements OnInit {
     ) {}
 
     ngOnInit() {
+
+        this.route.paramMap.subscribe((params: ParamMap) => {
+            this.bucket = +params.get('bucketId');
+            this.recordId = +params.get('recordId');
+
+            if (this.bucket) {
+                this.source = 'b';
+            } else if (this.recordId) {
+                this.source = 'r';
+            }
+        });
+
         this.load();
     }
 
@@ -183,7 +195,7 @@ export class MarcBatchComponent implements OnInit {
             return !this.bucket;
 
         } else if (this.source === 'c') {
-            return (!this.csvColumn || !this.csvFile);
+            return (this.csvColumn < 0 || !this.csvFile);
 
         } else if (this.source === 'r') {
             return !this.recordId;

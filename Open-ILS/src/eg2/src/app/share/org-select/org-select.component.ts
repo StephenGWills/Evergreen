@@ -39,6 +39,7 @@ interface OrgDisplay {
   templateUrl: './org-select.component.html'
 })
 export class OrgSelectComponent implements OnInit {
+    static domId = 0;
 
     selected: OrgDisplay;
     click$ = new Subject<string>();
@@ -54,7 +55,7 @@ export class OrgSelectComponent implements OnInit {
     @Input() placeholder = '';
 
     // ID to display in the DOM for this selector
-    @Input() domId = '';
+    @Input() domId = 'eg-org-select-' + OrgSelectComponent.domId++;
 
     // Org unit field displayed in the selector
     @Input() displayField = 'shortname';
@@ -77,6 +78,10 @@ export class OrgSelectComponent implements OnInit {
     _disabledOrgs: number[] = [];
     @Input() set disableOrgs(ids: number[]) {
         if (ids) { this._disabledOrgs = ids; }
+    }
+
+    get disableOrgs(): number[] {
+        return this._disabledOrgs;
     }
 
     // Apply an org unit value at load time.
@@ -152,15 +157,6 @@ export class OrgSelectComponent implements OnInit {
         this.org.absorbTree();
         this.sortedOrgs = this.org.list();
 
-        if (this.initialOrg || this.initialOrgId) {
-            this.selected = this.formatForDisplay(
-                this.initialOrg || this.org.get(this.initialOrgId)
-            );
-
-            this.markAsLoaded();
-            return;
-        }
-
         const promise = this.persistKey ?
             this.getFromSetting() : Promise.resolve(null);
 
@@ -168,7 +164,18 @@ export class OrgSelectComponent implements OnInit {
 
             if (!startupOrgId) {
 
-                if (this.fallbackOrgId) {
+                if (this.selected) {
+                    // A value may have been applied while we were
+                    // talking to the network.
+                    startupOrgId = this.selected.id;
+
+                } else if (this.initialOrg) {
+                    startupOrgId = this.initialOrg.id();
+
+                } else if (this.initialOrgId) {
+                    startupOrgId = this.initialOrgId;
+
+                } else if (this.fallbackOrgId) {
                     startupOrgId = this.fallbackOrgId;
 
                 } else if (this.fallbackOrg) {
@@ -239,7 +246,7 @@ export class OrgSelectComponent implements OnInit {
         return {
             id : org.id(),
             label : label,
-            disabled : false
+            disabled : this.disableOrgs.includes(org.id())
         };
     }
 
@@ -267,7 +274,20 @@ export class OrgSelectComponent implements OnInit {
         this.selected = null;
     }
 
+    // NgbTypeahead doesn't offer a way to style the dropdown
+    // button directly, so we have to reach up and style it ourselves.
+    applyDisableStyle() {
+        this.disableOrgs.forEach(id => {
+            const node = document.getElementById(`${this.domId}-${id}`);
+            if (node) {
+                const button = node.parentNode as HTMLElement;
+                button.classList.add('disabled');
+            }
+        });
+    }
+
     filter = (text$: Observable<string>): Observable<OrgDisplay[]> => {
+
         return text$.pipe(
             debounceTime(200),
             distinctUntilChanged(),
@@ -300,6 +320,10 @@ export class OrgSelectComponent implements OnInit {
 
                     });
                 }
+
+                // Give the typeahead a chance to open before applying
+                // the disabled org unit styling.
+                setTimeout(() => this.applyDisableStyle());
 
                 return orgs.map(org => this.formatForDisplay(org));
             })

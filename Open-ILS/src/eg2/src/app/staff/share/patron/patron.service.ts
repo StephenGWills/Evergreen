@@ -24,9 +24,12 @@ export class PatronService {
            'actor', barcode.trim());
     }
 
+    // Note pcrudOps should be constructed from the perspective
+    // of a user ('au') retrieval, not a barcode ('ac') retrieval.
     getByBarcode(barcode: string, pcrudOps?: any): Promise<IdlObject> {
         return this.bcSearch(barcode).toPromise()
         .then(barcodes => {
+            if (!barcodes) { return null; }
 
             // Use the first successful barcode response.
             // TODO: What happens when there are multiple responses?
@@ -35,7 +38,7 @@ export class PatronService {
             for (let i = 0; i < barcodes.length; i++) {
                 const bc = barcodes[i];
                 if (!this.evt.parse(bc)) {
-                    return this.getById(bc.id);
+                    return this.getById(bc.id, pcrudOps);
                 }
             }
 

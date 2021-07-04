@@ -399,7 +399,8 @@ CREATE TRIGGER actor_org_unit_parent_protect_trigger
 
 CREATE TABLE actor.org_lasso (
     id      SERIAL  PRIMARY KEY,
-    name   	TEXT    UNIQUE
+    name   	TEXT    UNIQUE,
+    global  BOOL    NOT NULL DEFAULT FALSE
 );
 
 CREATE TABLE actor.org_lasso_map (
@@ -662,7 +663,9 @@ CREATE TABLE actor.org_address (
 	state		TEXT,
 	country		TEXT	NOT NULL,
 	post_code	TEXT	NOT NULL,
-    san         TEXT
+	san			TEXT,
+	latitude	FLOAT,
+	longitude	FLOAT
 );
 
 CREATE INDEX actor_org_address_org_unit_idx ON actor.org_address (org_unit);

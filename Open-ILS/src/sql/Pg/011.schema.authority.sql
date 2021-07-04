@@ -279,7 +279,7 @@ CREATE TRIGGER authority_full_rec_fti_trigger
     BEFORE UPDATE OR INSERT ON authority.full_rec
     FOR EACH ROW EXECUTE PROCEDURE oils_tsearch2('keyword');
 
-CREATE INDEX authority_full_rec_index_vector_idx ON authority.full_rec USING GIST (index_vector);
+CREATE INDEX authority_full_rec_index_vector_idx ON authority.full_rec USING GIN (index_vector);
 /* Enable LIKE to use an index for database clusters with locales other than C or POSIX */
 CREATE INDEX authority_full_rec_value_tpo_index ON authority.full_rec (value text_pattern_ops);
 /* But we still need this (boooo) for paging using >, <, etc */
@@ -407,7 +407,7 @@ CREATE TRIGGER authority_simple_heading_fti_trigger
     BEFORE UPDATE OR INSERT ON authority.simple_heading
     FOR EACH ROW EXECUTE PROCEDURE oils_tsearch2('keyword');
 
-CREATE INDEX authority_simple_heading_index_vector_idx ON authority.simple_heading USING GIST (index_vector);
+CREATE INDEX authority_simple_heading_index_vector_idx ON authority.simple_heading USING GIN (index_vector);
 CREATE INDEX authority_simple_heading_value_idx ON authority.simple_heading (value);
 CREATE INDEX authority_simple_heading_sort_value_idx ON authority.simple_heading (sort_value);
 CREATE INDEX authority_simple_heading_record_idx ON authority.simple_heading (record);
@@ -1142,7 +1142,7 @@ BEGIN
             component_node_list := oils_xpath( idx.component_xpath, heading_node, ARRAY[ARRAY[xfrm.prefix, xfrm.namespace_uri]] );
             FOR component_node IN SELECT x FROM unnest(component_node_list) AS x LOOP
             -- XXX much of this should be moved into oils_xpath_string...
-                curr_text := ARRAY_TO_STRING(evergreen.array_remove_item_by_value(evergreen.array_remove_item_by_value(
+                curr_text := ARRAY_TO_STRING(array_remove(array_remove(
                     oils_xpath( '//text()', -- get the content of all the nodes within the main selected node
                         REGEXP_REPLACE( component_node, E'\\s+', ' ', 'g' ) -- Translate adjacent whitespace to a single space
                     ), ' '), ''),  -- throw away morally empty (bankrupt?) strings

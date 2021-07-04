@@ -465,9 +465,14 @@ sub biblio_multi_search_full_rec {
     my $copies_visible = 'AND d.opac_visible IS TRUE AND cp.opac_visible IS TRUE AND cs.opac_visible IS TRUE AND cl.opac_visible IS TRUE';
 
     if ($self->api_name =~ /staff/o) {
+        # Staff want to see all copies regardless of visibility
         $copies_visible = '';
-        $has_copies     = '' if ($ou_type == 0);
-        $has_vols       = '' if ($ou_type == 0);
+        # When searching globally for staff avoid any copy filtering.
+        if ((defined $args{depth} && $args{depth} == 0) 
+            || $args{org_unit} == $U->get_org_tree->id) {
+            $has_copies = '';
+            $has_vols   = '';
+        }
     }
 
     my ($t_filter, $f_filter) = ('','');
@@ -598,7 +603,7 @@ sub biblio_multi_search_full_rec {
     my $rd_join = $use_rd ? "$metabib_record_descriptor rd," : '';
     my $rd_filter = $use_rd ? 'AND rd.record = f.record' : '';
 
-    if ($copies_visible) {
+    if ($has_copies) {
         $select = <<"        SQL";
             SELECT  f.record, $relevance, count(DISTINCT cp.id), $rank
             FROM    $search_table f,
@@ -2967,30 +2972,35 @@ sub query_parser_fts {
     }
     $ou = actor::org_unit->search( { shortname => $ou } )->next->id if ($ou and $ou !~ /^(-)?\d+$/);
 
-    # gather lasso, as with $ou
+
+#    # XXX The following, along with most of the surrounding code, is actually dead now. However, realigning to be more "true" and match surrounding.
+#    # gather lasso, as with $ou
     my $lasso = $args{lasso};
-    if (my ($filter) = $query->parse_tree->find_filter('lasso')) {
-            $lasso = $filter->args->[0] if (@{$filter->args});
-    }
-    $lasso = actor::org_lasso->search( { name => $lasso } )->next->id if ($lasso and $lasso !~ /^\d+$/);
-    $lasso = -$lasso if ($lasso);
-
-
-#    # XXX once we have org_unit containers, we can make user-defined lassos .. WHEEE
-#    # gather user lasso, as with $ou and lasso
-#    my $mylasso = $args{my_lasso};
-#    if (my ($filter) = $query->parse_tree->find_filter('my_lasso')) {
-#            $mylasso = $filter->args->[0] if (@{$filter->args});
+#    if (my ($filter) = $query->parse_tree->find_filter('lasso')) {
+#            $lasso = $filter->args->[0] if (@{$filter->args});
 #    }
-#    $mylasso = actor::org_unit->search( { name => $mylasso } )->next->id if ($mylasso and $mylasso !~ /^\d+$/);
-
-
-    # if we have a lasso, go with that, otherwise ... ou
-    $ou = $lasso if ($lasso);
+#    # search by name if an id (number) wasn't given
+#    $lasso = actor::org_lasso->search( { name => $lasso } )->next->id if ($lasso and $lasso !~ /^\d+$/);
+#
+#    # gather lasso org list
+#    my $lasso_orgs = [];
+#    $lasso_orgs = [actor::org_lasso_map->search( { lasso => $lasso } )] if ($lasso);
+#
+#
+##    # XXX once we have org_unit containers, we can make user-defined lassos .. WHEEE
+##    # gather user lasso, as with $ou and lasso
+    my $mylasso = $args{my_lasso};
+##    if (my ($filter) = $query->parse_tree->find_filter('my_lasso')) {
+##            $mylasso = $filter->args->[0] if (@{$filter->args});
+##    }
+##    $mylasso = actor::org_unit->search( { name => $mylasso } )->next->id if ($mylasso and $mylasso !~ /^\d+$/);
+#
+#
+#    # if we have a lasso, go with that, otherwise ... ou
+#    $ou = $lasso if ($lasso);
 
     # gather the preferred OU, if one is specified, as with $ou
     my $pref_ou = $args{pref_ou};
-    $log->info("pref_ou = $pref_ou");
     if (my ($filter) = $query->parse_tree->find_filter('pref_ou')) {
             $pref_ou = $filter->args->[0] if (@{$filter->args});
     }
@@ -3298,6 +3308,7 @@ sub query_parser_fts_wrapper {
 
     # XXX All of the following, down to the 'return' is basically dead code. someone higher up should handle it
     $query = "site($args{org_unit}) $query" if ($args{org_unit});
+    $query = "lasso($args{lasso}) $query" if ($args{lasso});
     $query = "depth($args{depth}) $query" if (defined($args{depth}));
     $query = "sort($args{sort}) $query" if ($args{sort});
     $query = "core_limit($args{core_limit}) $query" if ($args{core_limit});

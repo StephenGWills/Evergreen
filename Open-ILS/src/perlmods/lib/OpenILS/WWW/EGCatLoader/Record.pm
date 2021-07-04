@@ -7,6 +7,7 @@ use OpenILS::Utils::Fieldmapper;
 use OpenILS::Application::AppUtils;
 use Net::HTTP::NB;
 use IO::Select;
+use List::MoreUtils qw(uniq);
 my $U = 'OpenILS::Application::AppUtils';
 
 our $ac_types = ['toc',  'anotes', 'excerpt', 'summary', 'reviews'];
@@ -34,6 +35,8 @@ sub load_record {
     my $org_name = $ctx->{get_aou}->($org)->shortname;
     my $pref_ou = $self->_get_pref_lib();
     my $depth = $self->cgi->param('depth');
+    my $available = $self->cgi->param('available') || 'false';
+
     $depth = $ctx->{get_aou}->($org)->ou_type->depth 
         unless defined $depth; # can be 0
 
@@ -59,12 +62,32 @@ sub load_record {
         $self->timelog("load user lists and settings");
     }
 
+    # fetch geographic coordinates if user supplied an
+    # address
+    my $gl = $self->cgi->param('geographic-location');
+    my $coords;
+    if ($gl) {
+        my $geo = OpenSRF::AppSession->create("open-ils.geo");
+        $coords = $geo
+            ->request('open-ils.geo.retrieve_coordinates', $org, scalar $gl)
+            ->gather(1);
+        $geo->kill_me;
+    }
+    $ctx->{has_valid_coords} = 0;
+    if ($coords
+        && ref($coords)
+        && $$coords{latitude}
+        && $$coords{longitude}
+    ) {
+        $ctx->{has_valid_coords} = 1;
+    }
+
     # run copy retrieval in parallel to bib retrieval
     # XXX unapi
     my $cstore = OpenSRF::AppSession->create('open-ils.cstore');
     my $copy_rec = $cstore->request(
         'open-ils.cstore.json_query.atomic', 
-        $self->mk_copy_query($rec_id, $org, $copy_depth, $copy_limit, $copy_offset, $pref_ou)
+        $self->mk_copy_query($rec_id, $org, $copy_depth, $copy_limit, $copy_offset, $pref_ou, $coords)
     );
 
     if ($self->cgi->param('badges')) {
@@ -105,6 +128,24 @@ sub load_record {
     $ctx->{course_module_opt_in} = 0;
     if ($ctx->{get_org_setting}->($org, "circ.course_materials_opt_in")) {
         $ctx->{course_module_opt_in} = 1;
+    }
+
+    $ctx->{ou_distances} = {};
+    if ($ctx->{has_valid_coords}) {
+        my $circ_libs = [ uniq map { $_->{circ_lib} } @{$ctx->{copies}} ];
+        my $foreign_copy_circ_libs = [ 
+            map { $_->target_copy()->circ_lib() }
+            map { @{ $_->foreign_copy_maps() } }
+            @{ $ctx->{foreign_copies} }
+        ];
+        push @{ $circ_libs }, @$foreign_copy_circ_libs; # some overlap is OK here
+        my $ou_distance_list = $U->simplereq(
+            'open-ils.geo',
+            'open-ils.geo.sort_orgs_by_distance_from_coordinate.include_distances',
+            [ $coords->{latitude}, $coords->{longitude} ],
+            $circ_libs
+        );
+        $ctx->{ou_distances} = { map { $_->[0] => $_->[1] } @$ou_distance_list };
     }
 
     # Add public copy notes to each copy - and while we're in there, grab peer bib records
@@ -175,6 +216,7 @@ sub load_record {
     $self->timelog("past store copy retrieval call");
     $ctx->{copy_limit} = $copy_limit;
     $ctx->{copy_offset} = $copy_offset;
+    $ctx->{available} = $available;
 
     $ctx->{have_holdings_to_show} = 0;
     $ctx->{have_mfhd_to_show} = 0;
@@ -310,13 +352,31 @@ sub mk_copy_query {
     my $copy_limit = shift;
     my $copy_offset = shift;
     my $pref_ou = shift;
+    my $coords = shift;
+    my $staff = $self->ctx->{is_staff};
+    my $available = $self->cgi->param('available') || 'false';
 
     my $query = $U->basic_opac_copy_query(
-        $rec_id, undef, undef, $copy_limit, $copy_offset, $self->ctx->{is_staff}
+        $rec_id, undef, undef, $copy_limit, $copy_offset, $staff
     );
 
-    if($org != $self->ctx->{aou_tree}->()->id) { 
+    if($available eq 'true') {
+        $query->{where} = {
+            '+acp' => {
+                deleted => 'f',
+                ($staff ? () : (opac_visible => 't'))
+            },
+            '+ccs' => { is_available => 't'},
+            ($staff ? () : ( '+aou' => { opac_visible => 't' } ))
+        };
+    }
+
+    my $lasso_orgs = $self->search_lasso_orgs;
+
+    if($lasso_orgs || $org != $self->ctx->{aou_tree}->()->id) {
         # no need to add the org join filter if we're not actually filtering
+
+        my $filter_orgs = $lasso_orgs || $org;
         $query->{from}->{acp}->[1] = { aou => {
             fkey => 'circ_lib',
             field => 'id',
@@ -327,20 +387,29 @@ sub mk_copy_query {
                             column => 'id', 
                             transform => 'actor.org_unit_descendants',
                             result_field => 'id', 
-                            params => [$depth]
+                            ( $lasso_orgs ? () : (params => [$depth]) )
                         }]},
                         from => 'aou',
-                        where => {id => $org}
+                        where => {id => $filter_orgs}
                     }
                 }
             }
         }};
     };
 
+    my $ou_sort_param = [$org, $pref_ou ];
+    if ($coords
+        && ref($coords)
+        && $$coords{latitude}
+        && $$coords{longitude}
+    ) {
+        push(@$ou_sort_param, $$coords{latitude}, $$coords{longitude});
+    }
+
     # Unsure if we want these in the shared function, leaving here for now
     unshift(@{$query->{order_by}},
         { class => "aou", field => 'id',
-          transform => 'evergreen.rank_ou', params => [$org, $pref_ou]
+          transform => 'evergreen.rank_ou', params => $ou_sort_param
         }
     );
     push(@{$query->{order_by}},

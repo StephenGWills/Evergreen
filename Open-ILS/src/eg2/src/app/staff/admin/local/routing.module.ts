@@ -18,6 +18,17 @@ const routes: Routes = [{
     path: 'actor/address_alert',
     component: AddressAlertComponent
 }, {
+    path: 'asset/copy_location',
+    component: BasicAdminPageComponent,
+    data: [{
+        schema: 'asset',
+        table: 'copy_location',
+        fieldOrder: 'owning_lib,name,opac_visible,circulate,holdable,hold_verify,checkin_alert,deleted,label_prefix,label_suffix,url,id'}]
+}, {
+    path: 'asset/shelving_location_groups',
+    loadChildren: () =>
+      import('./shelving_location_groups/shelving_location_groups.module').then(m => m.ShelvingLocationGroupsModule)
+}, {
     path: 'container/carousel',
     component: AdminCarouselComponent
 }, {
@@ -27,6 +38,10 @@ const routes: Routes = [{
 }, {
     path: 'asset/course_module_term_course_map',
     component: CourseTermMapComponent
+}, {
+    path: 'config/circ_limit_set',
+    loadChildren: () =>
+      import('./circ_limit_set/circ_limit_set.module').then(m => m.CircLimitSetModule)
 }, {
     path: 'config/standing_penalty',
     component: StandingPenaltyComponent

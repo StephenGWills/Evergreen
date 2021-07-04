@@ -3,7 +3,7 @@
 
 # We need to ignore some filters in our count
 
-fignore = ['location_groups','site','core_limit','limit','badge_orgs','badges','estimation_strategy','depth'];
+fignore = ['lasso','location_groups','site','core_limit','limit','badge_orgs','badges','estimation_strategy','depth'];
 fcount = 0;
 FOR f IN ctx.query_struct.filters;
     IF fignore.grep('^' _ f.name _ '$').size;
@@ -105,7 +105,7 @@ END;
             l('Library: ');
             select_lib_label = l("Select search library");
             INCLUDE build_org_selector arialabel=select_lib_label
-              id='search_org_selector' show_loc_groups=1
+              id='search_org_selector' show_loc_groups=1 show_lassos=1
         -%]
         </label>
         </div>
@@ -118,8 +118,8 @@ END;
         <button id='search-submit-go' type="submit" class="btn btn-sm btn-opac"
             onclick='setTimeout(function(){$("search-submit-spinner").className=""; $("search-submit-go").className="hidden";[% IF ctx.depth_sel_button AND NOT took_care_of_form %] $("search-submit-go-depth").className="hidden";[% END %]}, 2000)'><i class="fas fa-search" aria-hidden="true"></i> [% l('Search') %]</button>
         </div>
-        [%- IF ctx.depth_sel_button AND NOT took_care_of_form %]
         <div class="col-auto mr-auto mr-md-1">
+        [%- IF ctx.depth_sel_button AND NOT took_care_of_form %]
         <button id='search-submit-go-depth' type="submit" value="[% ctx.depth_sel_depth %]" name="depth" class="btn btn-sm btn-opac"
             onclick='setTimeout(function(){$("search-submit-spinner").className=""; $("search-submit-go").className="hidden"; $("search-submit-go-depth").className="hidden";}, 2000)' title="[% ctx.depth_sel_tooltip | html %]"><i class="fas fa-globe" aria-hidden="true"></i> [% ctx.depth_sel_button_label | html %]</button>
         [%- END %]
@@ -185,6 +185,15 @@ END;
             [% stuff %]
         </div>
         [% END %]
+    [% END %]
+    [% IF ctx.search_summary.suggestions.one_class_one_term %]
+    <div class="result_block_visible refine_search" id="did_you_mean">
+        <em><strong>[% s_list = ctx.search_summary.suggestions.one_class_one_term; l('Did you mean: ') %]</strong></em>
+        [% FOREACH s IN s_list.suggestions %]
+            [% IF !loop.first(); l('or'); END %]
+            <a href="[% mkurl(ctx.opac_root _ '/results', {qtype=>s_list.class, query=>s.suggestion}) %]">[% s.suggestion | html %]</a>
+        [% END %]
+    </div>
     [% END %]
 
 

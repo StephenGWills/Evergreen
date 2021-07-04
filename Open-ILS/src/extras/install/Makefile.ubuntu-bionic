@@ -40,6 +40,7 @@ export DEBS = \
 	libemail-mime-perl\
 	libexcel-writer-xlsx-perl\
 	libgd-graph3d-perl\
+	libgeo-coder-osm-perl\
 	liblocale-maketext-lexicon-perl\
 	liblog-log4perl-perl\
 	libncurses5-dev\
@@ -90,9 +91,12 @@ export DEB_APACHE_DISCONF = \
     serve-cgi-bin
 
 export CPAN_MODULES = \
+	Geo::Coder::Google \
 	Business::OnlinePayment::PayPal \
 	Email::Send \
 	MARC::Charset \
+	String::KeyboardDistance \
+	Text::Levenshtein::Damerau::XS \
 	Net::Z3950::Simple2ZOOM
 
 export CPAN_MODULES_FORCE = \

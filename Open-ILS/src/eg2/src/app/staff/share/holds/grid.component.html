@@ -132,7 +132,7 @@
           {{hold.ucard_barcode}}
         </a>
       </ng-template>
-      <eg-grid-column i18n-label label="Patron Barcode" name="patron_barcode"
+      <eg-grid-column i18n-label label="Patron Barcode" path="ucard_barcode"
         [cellTemplate]="userBarcodeTmpl" [hidden]="true"></eg-grid-column>
 
       <eg-grid-column i18n-label label="Patron alias" path="usr_alias"></eg-grid-column>
@@ -150,13 +150,13 @@
           {{hold.title}}
         </a>
       </ng-template>
-      <eg-grid-column i18n-label label="Title" [hidden]="true" name='title' 
+      <eg-grid-column i18n-label label="Title" [hidden]="true" name='title'
         [cellTemplate]="titleTmpl"></eg-grid-column>
       <eg-grid-column i18n-label label="Author" path='author'
           [hidden]="true"></eg-grid-column>
       <eg-grid-column i18n-label label="Potential Items" path='potentials' datatype="int">
       </eg-grid-column>
-      <eg-grid-column i18n-label label="Status" [cellTemplate]="statusTemplate">
+      <eg-grid-column i18n-label label="Status" [cellTemplate]="statusTemplate" name="status_string">
       </eg-grid-column>
       <eg-grid-column i18n-label label="Queue Position"
           path='relative_queue_position' [hidden]="true" datatype="int"></eg-grid-column>

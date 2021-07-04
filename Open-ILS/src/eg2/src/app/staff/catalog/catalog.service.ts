@@ -1,4 +1,4 @@
-import {Injectable} from '@angular/core';
+import {Injectable, EventEmitter} from '@angular/core';
 import {Router, ActivatedRoute} from '@angular/router';
 import {IdlObject} from '@eg/core/idl.service';
 import {OrgService} from '@eg/core/org.service';
@@ -36,6 +36,11 @@ export class StaffCatalogService {
     // User object for above barcode.
     holdForUser: IdlObject;
 
+    // Emit that the value has changed so components can detect
+    // the change even when the component is not itself digesting
+    // new values.
+    holdForChange: EventEmitter<void> = new EventEmitter<void>();
+
     // Cache the currently selected detail record (i.g. catalog/record/123)
     // summary so the record detail component can avoid duplicate fetches
     // during record tab navigation.
@@ -65,7 +70,10 @@ export class StaffCatalogService {
 
         if (this.holdForBarcode) {
             this.patron.getByBarcode(this.holdForBarcode)
-            .then(user => this.holdForUser = user);
+            .then(user => {
+                this.holdForUser = user;
+                this.holdForChange.emit();
+            });
         }
 
         this.searchContext.org = this.org; // service, not searchOrg
@@ -73,9 +81,17 @@ export class StaffCatalogService {
         this.applySearchDefaults();
     }
 
+    clearHoldPatron() {
+        this.holdForUser = null;
+        this.holdForBarcode = null;
+        this.holdForChange.emit();
+    }
+
     cloneContext(context: CatalogSearchContext): CatalogSearchContext {
         const params: any = this.catUrl.toUrlParams(context);
-        return this.catUrl.fromUrlHash(params);
+        const ctx = this.catUrl.fromUrlHash(params);
+        ctx.isStaff = true; // not carried in the URL
+        return ctx;
     }
 
     applySearchDefaults(): void {
@@ -96,6 +112,9 @@ export class StaffCatalogService {
      */
     search(): void {
         if (!this.searchContext.isSearchable()) { return; }
+
+        // Clear cached detail summary for new searches.
+        this.currentDetailRecordSummary = null;
 
         const params = this.catUrl.toUrlParams(this.searchContext);
 

@@ -92,7 +92,7 @@ CREATE TRIGGER no_overlapping_deps
     BEFORE INSERT OR UPDATE ON config.db_patch_dependencies
     FOR EACH ROW EXECUTE PROCEDURE evergreen.array_overlap_check ('deprecates');
 
-INSERT INTO config.upgrade_log (version, applied_to) VALUES ('1242', :eg_version); -- remingtron/terranm
+INSERT INTO config.upgrade_log (version, applied_to) VALUES ('1265', :eg_version); -- phasefx/mmorgan/gmcharlt
 
 CREATE TABLE config.bib_source (
 	id		SERIAL	PRIMARY KEY,
@@ -1372,5 +1372,14 @@ VALUES
 ;
 
 SELECT SETVAL('config.carousel_type_id_seq'::TEXT, 100);
+
+CREATE TABLE config.geolocation_service (
+    id           SERIAL PRIMARY KEY,
+    active       BOOLEAN,
+    owner        INT NOT NULL, -- REFERENCES actor.org_unit (id)
+    name         TEXT,
+    service_code TEXT,
+    api_key      TEXT
+);
 
 COMMIT;

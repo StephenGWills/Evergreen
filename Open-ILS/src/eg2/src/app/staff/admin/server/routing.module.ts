@@ -13,12 +13,40 @@ const routes: Routes = [{
     path: 'actor/org_unit_type',
     component: OrgUnitTypeComponent
 }, {
+    path: 'config/coded_value_map',
+    loadChildren: () =>
+      import('./coded-value-maps/coded-value-maps.module').then(m => m.CodedValueMapsModule)
+}, {
     path: 'config/floating_group',
     loadChildren: () =>
       import('./floating-group/floating-group.module').then(m => m.FloatingGroupModule)
 }, {
+    path: 'config/hard_due_date',
+    component: BasicAdminPageComponent,
+    data: [{
+        schema: 'config',
+        table: 'hard_due_date',
+        fieldOrder: 'name,owner,ceiling_date,forceto'
+    }]
+}, {
     path: 'config/print_template',
     component: PrintTemplateComponent
+}, {
+    path: 'config/rule_recurring_fine',
+    component: BasicAdminPageComponent,
+    data: [{
+        schema: 'config',
+        table: 'rule_recurring_fine',
+        fieldOrder: 'name,low,normal,high,recurrence_interval,grace_period'
+    }]
+}, {
+    path: 'config/z3950_source',
+    component: BasicAdminPageComponent,
+    data: [{
+        schema: 'config',
+        table: 'z3950_source',
+        fieldOrder: 'name,label,host,port,db,record_format,transmission_format,auth,use_perm'
+    }]
 }, {
     path: 'permission/grp_tree',
     component: PermGroupTreeComponent

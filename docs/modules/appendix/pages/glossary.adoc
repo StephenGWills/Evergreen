@@ -20,7 +20,9 @@ Authority Record::
 Barcode::
   The code/number attached to the item.  This is not the database ID. Barcodes are added to items to facilitate the checking in and out of an item. Barcodes can be changed as needed. Physical barcodes that can be placed on items can follow several different barcode symboligies.
 Bibliographic record::
-  The record that contains data about a work, such as title, author and copyright date.
+  The record that contains data about a work, such as title, author and copyright date. A bibliographic record may have zero or more items attached, which are the things that (may) circulate. A bibliographic record is analogous to "Work" and "Instance" in BIBFRAME.
+BIBFRAME::
+  A conceptual model of the library world that defines Works, Instance, and Items among other concepts. Available at https://www.loc.gov/bibframe/docs/bibframe2-model.html
 Booking::
   Processes relating to reserving cataloged and non- bibliographic items.
 Brick::
@@ -73,7 +75,8 @@ Electronic data interchange (EDI)::
   Transmission of data between organizations using electronic means. This is used for Acquisitions. 
 Evergreen::
   Evergreen is an open source ILS designed to handle the processing of a geographical dispersed, resource sharing library network. 
-[[F]]FIFO (First In First Out):: 
+[[F]]Fieldmapper IDL:: See <<IDL, IDL>>
+FIFO (First In First Out):: 
   In a FIFO environment, holds are filled in the order that they are placed.
 FUD (Fear, Uncertainty, Doubt)::
   FUD is a marketing stratagy to try to install Fear, Uncertainty, and/or Doubt about a competitors product.   
@@ -97,12 +100,17 @@ Hold::
   The exclusive right for a patron to checkout a specific item. 
 Hold boundaries::
   Define which organizational units are available to fill specific holds.
+Hold Groups::
+  A special use of Patron Buckets where lists of patrons that can then be used to place multiple title-level holds on the same bibliographic record.
 Holdings import profile::
   Identifies the <<IIA, Import Item Attributes>> definition.
 Holding subfield::
   Used in the acquisitions module to map subfields to the appropriate item data. 
+Hopeless Holds::
+  Holds which have become unfillable due to there being no copies in hold_copy_map and/or all copies in hold_copy_map are in a item status with the hopeless_prone property set to “True.”
 [[I]]ICL (Inter-Consortium Loans)::
   Inter-Consortium Loans are like ILL's, but different in the fact that the loan happens just with in the Consortium. 
+[[IDL]]IDL (Interface Definition Language):: A model that Evergreen's software components use to understand how Evergreen's data are structured. IDL is sometime refered to as the Fieldmapper IDL.
 [[ILS]]ILS (Integrated Library System)::
   The Integrated Library System is a set of applications which perform the business and technical aspects of library management, including but not exclusive to acquistions, cataloging, circulation, and booking. 
 ILL (Inter-Library Loan)::
@@ -116,7 +124,7 @@ ISBN (International Standard Book Number)::
 ISSN (International Standard Serial Number)::
   International Standard Serial Number is a unigue 8 digit number assigned by the Internation Serials Data System to identify a specfic Serial Title. 
 [[item]]Item:: 
-  The actual item.
+  Item records contain information about an object such as a book, DVD, or kit, that may be available to circulate to patrons (based on circulation policies). Items belong to bibliographic records. The Evergreen Item is analogous to "Item" in BIBFRAME.
 Item barcode::
   Item barcodes uniquely identify each specific item entered into the Catalog.
 Item Buckets::
@@ -245,7 +253,7 @@ Workstation::
 xpath::
   The XML Path Language, a query language based on a tree representation of an XML document. It is used to programmatically select nodes from an XML document and to do minor computation involving strings, numbers and Boolean values. It allows you to identify parts of the XML document tree, to navigate around the tree, and to uniquely select nodes. The currently version is "XPath 2.0". It was originally defined by the World Wide Web Consortium (W3C). 
 [[Y]]YAOUS:: 
-  Yet Another Organization Unit Setting
+  Yet Another Organization Unit Setting; slang for Library Settings
 [[Z]]Z39.50 ::
   An international standard client/server protocol for communication between computer systems, primarily library and information related systems.
   See Also: <<SRU>>

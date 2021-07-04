@@ -45,6 +45,15 @@ OSRFTranslatorConfig @sysconfdir@/opensrf_core.xml
 # Translator memcache server.  Default is localhost
 # OSRFTranslatorCacheServer 127.0.0.1:11211
 
+# ----------------------------------------------------------------------------------
+# Log redaction
+# ----------------------------------------------------------------------------------
+<Location />
+    # handler for redacting URL query parameters from
+    # the access log
+    PerlLogHandler OpenILS::WWW::EGWeb::log_handler
+    PerlAddVar OILSUrlParamToRedact "geographic-location"
+</Location>
 
 # ----------------------------------------------------------------------------------
 # Added content plugin
@@ -657,17 +666,8 @@ RewriteRule ^/openurl$ ${openurl:%1} [NE,PT]
     # contains the messages.
     #
     # If you enable two or more locales, then users will be able to
-    # select their preferred locale from a locale picker in the TPAC.
+    # select their preferred locale from a locale picker in the Bootstrap OPAC.
     #
-    #PerlAddVar OILSWebLocale "en"
-    #PerlAddVar OILSWebLocale "@localstatedir@/data/locale/opac/messages.en.po"
-    #PerlAddVar OILSWebLocale "en_ca"
-    #PerlAddVar OILSWebLocale "@localstatedir@/data/locale/opac/en-CA.po"
-    #PerlAddVar OILSWebLocale "fr_ca"
-    #PerlAddVar OILSWebLocale "@localstatedir@/data/locale/opac/fr-CA.po"
-
-    # If you're using the Bootstrap OPAC, you should instead set the locales
-    # like this:
     #PerlAddVar OILSWebLocale "en"
     #PerlAddVar OILSWebLocale "@localstatedir@/data/locale/bootstrap-opac/messages.en.po"
     #PerlAddVar OILSWebLocale "en_ca"
@@ -675,12 +675,21 @@ RewriteRule ^/openurl$ ${openurl:%1} [NE,PT]
     #PerlAddVar OILSWebLocale "fr_ca"
     #PerlAddVar OILSWebLocale "@localstatedir@/data/locale/bootstrap-opac/fr-CA.po"
 
+    # If you're using the TPAC OPAC, you should instead set the locales
+    # like this:
+    #PerlAddVar OILSWebLocale "en"
+    #PerlAddVar OILSWebLocale "@localstatedir@/data/locale/opac/messages.en.po"
+    #PerlAddVar OILSWebLocale "en_ca"
+    #PerlAddVar OILSWebLocale "@localstatedir@/data/locale/opac/en-CA.po"
+    #PerlAddVar OILSWebLocale "fr_ca"
+    #PerlAddVar OILSWebLocale "@localstatedir@/data/locale/opac/fr-CA.po"
+
     # Set the default locale: defaults to en-US
     #PerlAddVar OILSWebDefaultLocale "fr_ca"
     
     # Templates will be loaded from the following paths in reverse order.
     PerlAddVar OILSWebTemplatePath "@localstatedir@/templates"
-    #PerlAddVar OILSWebTemplatePath "@localstatedir@/templates-bootstrap" #Uncomment this line to use the new bootstrap OPAC
+    PerlAddVar OILSWebTemplatePath "@localstatedir@/templates-bootstrap" # Comment this line out to use the legacy TPAC
     #PerlAddVar OILSWebTemplatePath "@localstatedir@/templates_localskin"
 
     #-------------------------------------------------
@@ -733,6 +742,10 @@ RewriteRule ^/openurl$ ${openurl:%1} [NE,PT]
     </IfModule>
 </LocationMatch>
 <Location /eg/opac>
+    # Uncomment the entries below to enable Shibboleth authentication
+    #AuthType shibboleth
+    #Require shibboleth
+
     PerlSetVar OILSWebContextLoader "OpenILS::WWW::EGCatLoader"
     # Expire the HTML quickly since we're loading dynamic data for each page
     ExpiresActive On
@@ -955,13 +968,13 @@ RewriteRule ^/openurl$ ${openurl:%1} [NE,PT]
 #RewriteCond %{REQUEST_URI} ^/eg2/
 #RewriteCond %{REQUEST_URI} !^/eg2/fr-CA/
 #RewriteCond %{HTTP_COOKIE} eg_locale=fr_ca
-#RewriteRule ^/eg2/(.*) https://%{HTTP_HOST}/eg2/fr-CA/$1 [R=307,L]
+#RewriteRule ^/eg2/(.*) https://%{HTTP_HOST}/eg2/fr-CA/$1 [NE,R=307,L]
 
 # Default / en-US.
 # No alternate supported cookie provided.
 RewriteCond %{REQUEST_URI}  ^/eg2/
 RewriteCond %{REQUEST_URI}  !^/eg2/([a-z]{2}-[A-Z]{2})/
-RewriteRule ^/eg2/(.*) https://%{HTTP_HOST}/eg2/en-US/$1 [R=307,L]
+RewriteRule ^/eg2/(.*) https://%{HTTP_HOST}/eg2/en-US/$1 [NE,R=307,L]
 
 # en-US build
 # This is the only required configuration when only using the default locale.

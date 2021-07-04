@@ -50,6 +50,11 @@ export class CatalogService {
         } else if (ctx.identSearch.isSearchable() &&
             ctx.identSearch.queryType === 'item_barcode') {
             return this.barcodeSearch(ctx);
+        } else if (
+            ctx.isStaff &&
+            ctx.identSearch.isSearchable() &&
+            ctx.identSearch.queryType === 'identifier|tcn') {
+            return this.tcnStaffSearch(ctx);
         } else {
             return this.termSearch(ctx);
         }
@@ -74,17 +79,34 @@ export class CatalogService {
         });
     }
 
+    tcnStaffSearch(ctx: CatalogSearchContext): Promise<void> {
+        return this.net.request(
+            'open-ils.search',
+            'open-ils.search.biblio.tcn',
+            ctx.identSearch.value, 1
+        ).toPromise().then(result => {
+            result.ids =  result.ids.map(id => [id]);
+            this.applyResultData(ctx, result);
+            ctx.searchState = CatalogSearchState.COMPLETE;
+            this.onSearchComplete.emit(ctx);
+        });
+    }
+
+
     // "Search" the basket by loading the IDs and treating
     // them like a standard query search results set.
     basketSearch(ctx: CatalogSearchContext): Promise<void> {
 
         return this.basket.getRecordIds().then(ids => {
 
+            const pageIds =
+                ids.slice(ctx.pager.offset, ctx.pager.limit + ctx.pager.offset);
+
             // Map our list of IDs into a search results object
             // the search context can understand.
             const result = {
                 count: ids.length,
-                ids: ids.map(id => [id])
+                ids: pageIds.map(id => [id])
             };
 
             this.applyResultData(ctx, result);
@@ -392,7 +414,16 @@ export class CatalogService {
     }
 
     fetchCopyLocations(contextOrg: number | IdlObject): Promise<any> {
-        const orgIds = this.org.fullPath(contextOrg, true);
+        const contextOrgId: any = this.org.get(contextOrg).id();
+
+        // we ordinarily want the shelving locations associated with
+        // all ancestors and descendants of the context OU, but
+        // if the context OU is the root, we intentionally want
+        // only the ones owned by the root OU
+        const orgIds: any[] = contextOrgId === this.org.root().id()
+            ? [contextOrgId]
+            : this.org.fullPath(contextOrg, true);
+
         this.copyLocations = [];
 
         return this.pcrud.search('acpl',

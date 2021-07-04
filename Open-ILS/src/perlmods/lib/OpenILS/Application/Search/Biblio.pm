@@ -138,7 +138,7 @@ sub record_id_to_mods_slim {
     my( $self, $client, $id ) = @_;
     return undef unless defined $id;
 
-    if(ref($id) and ref($id) == 'ARRAY') {
+    if(ref($id) and ref($id) eq 'ARRAY') {
         return _records_to_mods( @$id );
     }
     my $mods_list = _records_to_mods( $id );
@@ -829,7 +829,7 @@ __PACKAGE__->register_method(
 
 sub multiclass_query {
     # arghash only really supports limit/offset anymore
-    my($self, $conn, $arghash, $query, $docache) = @_;
+    my($self, $conn, $arghash, $query, $docache, $phys_loc) = @_;
 
     if ($query) {
         $query =~ s/\+/ /go;
@@ -841,7 +841,7 @@ sub multiclass_query {
     $logger->debug("initial search query => $query") if $query;
 
     (my $method = $self->api_name) =~ s/\.query/.staged/o;
-    return $self->method_lookup($method)->dispatch($arghash, $docache);
+    return $self->method_lookup($method)->dispatch($arghash, $docache, $phys_loc);
 
 }
 
@@ -1130,7 +1130,9 @@ __PACKAGE__->register_method(
 
 my $estimation_strategy;
 sub staged_search {
-    my($self, $conn, $search_hash, $docache) = @_;
+    my($self, $conn, $search_hash, $docache, $phys_loc) = @_;
+
+    $phys_loc ||= $U->get_org_tree->id;
 
     my $IAmMetabib = ($self->api_name =~ /metabib/) ? 1 : 0;
 
@@ -1285,6 +1287,57 @@ sub staged_search {
         $cache->put_cache($key, $cache_data, $cache_timeout);
     }
 
+    my $setting_names = [ qw/
+             opac.did_you_mean.max_suggestions
+             opac.did_you_mean.low_result_threshold
+             search.symspell.min_suggestion_use_threshold
+             search.symspell.soundex.weight
+             search.symspell.pg_trgm.weight
+             search.symspell.keyboard_distance.weight/ ];
+    my %suggest_settings = $U->ou_ancestor_setting_batch_insecure(
+        $phys_loc, $setting_names
+    );
+
+    # Defaults...
+    $suggest_settings{$_} ||= {value=>undef} for @$setting_names;
+
+    # Pull this one off the front, it's not used for the function call
+    my $max_suggestions_setting = shift @$setting_names;
+    my $sugg_low_thresh_setting = shift @$setting_names;
+    $max_suggestions_setting = $suggest_settings{$max_suggestions_setting}{value} // -1;
+    my $suggest_low_threshold = $suggest_settings{$sugg_low_thresh_setting}{value} || 0;
+
+    if ($global_summary->{visible} <= $suggest_low_threshold and $max_suggestions_setting != 0) {
+        # For now, we're doing one-class/one-term suggestions only
+        my ($class, $term) = one_class_one_term($global_summary->{query_struct});
+        if ($class && $term) { # check for suggestions!
+            my $suggestion_verbosity = 4;
+            if ($max_suggestions_setting == -1) { # special value that means "only best suggestion, and not always"
+                $max_suggestions_setting = 1;
+                $suggestion_verbosity = 0;
+            }
+
+            my @settings_params = map { $suggest_settings{$_}{value} } @$setting_names;
+            my $suggs = new_editor()->json_query({
+                from  => [
+                    'search.symspell_lookup',
+                        $term, $class,
+                        $suggestion_verbosity,
+                        1, # case transfer
+                        @settings_params
+                ],
+                limit => $max_suggestions_setting
+            });
+            if (@$suggs and $$suggs[0]{suggestion} ne $term) {
+                $global_summary->{suggestions}{'one_class_one_term'} = {
+                    class       => $class,
+                    term        => $term,
+                    suggestions  => $suggs
+                };
+            }
+        }
+    }
+
     my @results = grep {defined $_} @$all_results[$user_offset..($user_offset + $user_limit - 1)];
 
     $conn->respond_complete(
@@ -1303,6 +1356,30 @@ sub staged_search {
     $logger->info("Completed canonicalized search is: $$global_summary{canonicalized_query}");
 
     return cache_facets($facet_key, $new_ids, $IAmMetabib, $ignore_facet_classes) if $docache;
+}
+
+sub one_class_one_term {
+    my $qstruct = shift;
+    my $node = $$qstruct{children};
+
+    my $class = undef;
+    my $term = undef;
+    while ($node) {
+        last if (
+            $$node{'|'}
+            or @{$$node{'&'}} != 1
+            or ($$node{'&'}[0]{fields} and @{$$node{'&'}[0]{fields}} > 0)
+        );
+
+        $class ||= $$node{'&'}[0]{class};
+        $term ||= $$node{'&'}[0]{content};
+
+        last if ($term);
+
+        $node = $$node{'&'}[0]{children};
+    }
+
+    return ($class, $term);
 }
 
 sub fetch_display_fields {
@@ -1909,10 +1986,10 @@ __PACKAGE__->register_method(
         desc   => 'Returns a printable version of the specified bib record',
         params => [
             { desc => 'Biblio record entry ID or array of IDs', type => 'number' },
-            { desc => 'Context library for holdings, if applicable' => 'number' },
-            { desc => 'Sort order, if applicable' => 'string' },
-            { desc => 'Sort direction, if applicable' => 'string' },
-            { desc => 'Definition Group Member id' => 'number' },
+            { desc => 'Context library for holdings, if applicable', type => 'number' },
+            { desc => 'Sort order, if applicable', type => 'string' },
+            { desc => 'Sort direction, if applicable', type => 'string' },
+            { desc => 'Definition Group Member id', type => 'number' },
         ],
         return => {
             desc => q/An action_trigger.event object or error event./,
@@ -1926,15 +2003,15 @@ __PACKAGE__->register_method(
     signature => {
         desc   => 'Emails an A/T templated version of the specified bib records to the authorized user',
         params => [
-            { desc => 'Authentication token',  type => 'string'},
+            { desc => 'Authentication token', type => 'string'},
             { desc => 'Biblio record entry ID or array of IDs', type => 'number' },
-            { desc => 'Context library for holdings, if applicable' => 'number' },
-            { desc => 'Sort order, if applicable' => 'string' },
-            { desc => 'Sort direction, if applicable' => 'string' },
-            { desc => 'Definition Group Member id' => 'number' },
-            { desc => 'Whether to bypass auth due to captcha' => 'bool' },
-            { desc => 'Email address, if none for the user' => 'string' },
-            { desc => 'Subject, if customized' => 'string' },
+            { desc => 'Context library for holdings, if applicable', type => 'number' },
+            { desc => 'Sort order, if applicable', type => 'string' },
+            { desc => 'Sort direction, if applicable', type => 'string' },
+            { desc => 'Definition Group Member id', type => 'number' },
+            { desc => 'Whether to bypass auth due to captcha', type => 'bool' },
+            { desc => 'Email address, if none for the user', type => 'string' },
+            { desc => 'Subject, if customized', type => 'string' },
         ],
         return => {
             desc => q/Undefined on success, otherwise an error event./,
@@ -2852,6 +2929,87 @@ sub mk_copy_query {
     return $query;
 }
 
+__PACKAGE__->register_method(
+    method    => 'record_urls',
+    api_name  => 'open-ils.search.biblio.record.resource_urls.retrieve',
+    argc      => 1,
+    stream    => 1,
+    signature => {
+        desc   => q/Returns bib record 856 URL content./,
+        params => [
+            {desc => 'Context org unit ID', type => 'number'},
+            {desc => 'Record ID or Array of Record IDs', type => 'number or array'}
+        ],
+        return => {
+            desc => 'Stream of URL objects, one collection object per record',
+            type => 'object'
+        }
+    }
+);
+
+sub record_urls {
+    my ($self, $client, $org_id, $record_ids) = @_;
+
+    $record_ids = [$record_ids] unless ref $record_ids eq 'ARRAY';
+
+    my $e = new_editor();
+
+    for my $record_id (@$record_ids) {
+
+        my @urls;
+
+        # Start with scoped located URIs
+        my $uris = $e->json_query({
+            from => ['evergreen.located_uris_as_uris', $record_id, $org_id]});
+
+        for my $uri (@$uris) {
+            push(@urls, {
+                href => $uri->{href},
+                label => $uri->{label},
+                note => $uri->{use_restriction}
+            });
+        }
+
+        # Logic copied from TPAC misc_utils.tts
+        my $bib = $e->retrieve_biblio_record_entry($record_id)
+            or return $e->event;
+
+        my $marc_doc = $U->marc_xml_to_doc($bib->marc);
+
+        for my $node ($marc_doc->findnodes('//*[@tag="856" and @ind1="4"]')) {
+
+            # asset.uri's
+            next if $node->findnodes('./*[@code="9" or @code="w" or @code="n"]');
+
+            my $url = {};
+            my ($label) = $node->findnodes('./*[@code="y"]');
+            my ($notes) = $node->findnodes('./*[@code="z" or @code="3"]');
+
+            my $first = 1;
+            for my $href_node ($node->findnodes('./*[@code="u"]')) {
+                next unless $href_node;
+
+                # it's possible for multiple $u's to exist within 1 856 tag.
+                # in that case, honor the label/notes data for the first $u, but
+                # leave any subsequent $u's as unadorned href's.
+                # use href/link/note keys to be consistent with args.uri's
+
+                my $href = $href_node->textContent;
+                push(@urls, {
+                    href => $href,
+                    label => ($first && $label) ?  $label->textContent : $href,
+                    note => ($first && $notes) ? $notes->textContent : '',
+                    ind2 => $node->getAttribute('ind2')
+                });
+                $first = 0;
+            }
+        }
+
+        $client->respond({id => $record_id, urls => \@urls});
+    }
+
+    return undef;
+}
 
 __PACKAGE__->register_method(
     method    => 'catalog_record_summary',
@@ -2920,8 +3078,8 @@ sub catalog_record_summary {
     for my $rec_id (@$record_ids) {
 
         my $response = $is_meta ? 
-            get_one_metarecord_summary($e, $rec_id) :
-            get_one_record_summary($e, $rec_id);
+            get_one_metarecord_summary($self, $e, $org_id, $rec_id) :
+            get_one_record_summary($self, $e, $org_id, $rec_id);
 
         ($response->{copy_counts}) = $copy_method->run($org_id, $rec_id);
 
@@ -2934,17 +3092,28 @@ sub catalog_record_summary {
     return undef;
 }
 
+sub get_one_rec_urls {
+    my ($self, $e, $org_id, $bib_id) = @_;
+
+    my ($resp) = $self->method_lookup(
+        'open-ils.search.biblio.record.resource_urls.retrieve')
+        ->run($org_id, $bib_id);
+
+    return $resp->{urls};
+}
+
 # Start with a bib summary and augment the data with additional
 # metarecord content.
 sub get_one_metarecord_summary {
-    my ($e, $rec_id) = @_;
+    my ($self, $e, $org_id, $rec_id) = @_;
 
     my $meta = $e->retrieve_metabib_metarecord($rec_id) or return {};
     my $maps = $e->search_metabib_metarecord_source_map({metarecord => $rec_id});
 
     my $bre_id = $meta->master_record; 
 
-    my $response = get_one_record_summary($e, $bre_id);
+    my $response = get_one_record_summary($self, $e, $org_id, $bre_id);
+    $response->{urls} = get_one_rec_urls($self, $e, $org_id, $bre_id);
 
     $response->{metabib_id} = $rec_id;
     $response->{metabib_records} = [map {$_->source} @$maps];
@@ -2969,7 +3138,7 @@ sub get_one_metarecord_summary {
 }
 
 sub get_one_record_summary {
-    my ($e, $rec_id) = @_;
+    my ($self, $e, $org_id, $rec_id) = @_;
 
     my $bre = $e->retrieve_biblio_record_entry([$rec_id, {
         flesh => 1,
@@ -3001,7 +3170,8 @@ sub get_one_record_summary {
         id => $rec_id,
         record => $bre,
         display => $display,
-        attributes => $attributes
+        attributes => $attributes,
+        urls => get_one_rec_urls($self, $e, $org_id, $rec_id)
     };
 }
 

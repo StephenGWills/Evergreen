@@ -106,7 +106,6 @@
      }, lang, bidi;
 </script>
 <script type="text/javascript" src="[% ctx.media_prefix %]/js/dojo/dojo/dojo.js?[% ctx.eg_cache_hash %]"></script>
-<script type="text/javascript" src="[% ctx.media_prefix %]/js/dojo/dojo/openils_dojo.js?[% ctx.eg_cache_hash %]"></script>
 
 [%- # So the following works in Mozilla and Chrome, but not in IE8.
     # Seems like it /should/ work anywhere, though, and obviate the
@@ -170,7 +169,7 @@ var aou_hash = {
 [%- IF ctx.max_cart_size; %]
 <script type="text/javascript">var max_cart_size = [% ctx.max_cart_size %];</script>
 [%- END; %]
-
+<script type="text/javascript" src="[% ctx.media_prefix %]/js/ui/default/opac/accordion.js[% ctx.cache_key %]"></script>
 
 <link rel="stylesheet" href="[% ctx.media_prefix %]/js/ui/default/common/build/js/glide/css/glide.core.min.css[% ctx.cache_key %]">
 <link rel="stylesheet" href="[% ctx.media_prefix %]/js/ui/default/common/build/js/glide/css/glide.theme.min.css[% ctx.cache_key %]">

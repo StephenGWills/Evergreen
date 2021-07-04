@@ -323,7 +323,7 @@ INSERT INTO config.metabib_field (id, field_class, name, format,
 VALUES (
     52, 'identifier', 'origin_info', 'marcxml',
     oils_i18n_gettext(52, 'Origin Info', 'cmf', 'label'),
-    $$//*[@tag='260']$$,
+    $$//*[@tag='260' or @tag='264'][1]$$,
     $$//*[local-name()='subfield' and contains('abc',@code)]$$,
     TRUE, FALSE, FALSE
 );
@@ -1948,7 +1948,19 @@ INSERT INTO permission.perm_list ( id, code, description ) VALUES
  ( 625, 'VIEW_BOOKING_RESERVATION', oils_i18n_gettext(625,
     'View booking reservations', 'ppl', 'description')),
  ( 626, 'VIEW_BOOKING_RESERVATION_ATTR_MAP', oils_i18n_gettext(626,
-    'View booking reservation attribute maps', 'ppl', 'description'))
+    'View booking reservation attribute maps', 'ppl', 'description')),
+ ( 627, 'SSO_ADMIN', oils_i18n_gettext(627,
+    'Modify patron SSO settings', 'ppl', 'description')),
+ ( 628, 'MANAGE_HOLD_GROUPS', oils_i18n_gettext(628,
+    'Manage batch (subscription) hold events', 'ppl', 'description')),
+ ( 629, 'ADMIN_LIBRARY_GROUPS', oils_i18n_gettext(629,
+    'Administer library groups', 'ppl', 'description')),
+ ( 630, 'VIEW_GEOLOCATION_SERVICES', oils_i18n_gettext(630,
+    'View geographic location services', 'ppl', 'description')),
+ ( 631, 'ADMIN_GEOLOCATION_SERVICES', oils_i18n_gettext(631,
+    'Administer geographic location services', 'ppl', 'description')),
+ ( 632, 'UPDATE_USER_PHOTO_URL', oils_i18n_gettext(632,
+    'Update the user photo url field in patron registration and editor', 'ppl', 'description'))
 ;
 
 
@@ -2429,7 +2441,8 @@ INSERT INTO permission.grp_perm_map (grp, perm, depth, grantable)
 			'PATRON_EXCEEDS_FINES.override',
 			'PATRON_EXCEEDS_OVERDUE_COUNT.override',
 			'RETRIEVE_RESERVATION_PULL_LIST',
-			'UPDATE_HOLD');
+			'UPDATE_HOLD',
+            'UPDATE_USER_PHOTO_URL');
 
 
 -- Add advanced circulation permissions to the Circulation Admin group
@@ -2898,6 +2911,7 @@ INSERT INTO action.hold_request_cancel_cause (id,label) VALUES (4, oils_i18n_get
 INSERT INTO action.hold_request_cancel_cause (id,label) VALUES (5, oils_i18n_gettext(5, 'Staff forced', 'ahrcc', 'label'));
 INSERT INTO action.hold_request_cancel_cause (id,label) VALUES (6, oils_i18n_gettext(6, 'Patron via OPAC', 'ahrcc', 'label'));
 INSERT INTO action.hold_request_cancel_cause (id,label) VALUES (7, oils_i18n_gettext(7, 'Patron via SIP', 'ahrcc', 'label'));
+INSERT INTO action.hold_request_cancel_cause (id,label) VALUES (8, oils_i18n_gettext(8, 'Hold Group Event rollback', 'ahrcc', 'label'));
 SELECT SETVAL('action.hold_request_cancel_cause_id_seq', 100);
 
 
@@ -3021,6 +3035,32 @@ INSERT INTO config.usr_setting_type (name,opac_visible,label,description,datatyp
         ),
         'string'
     );
+
+INSERT INTO config.usr_setting_type (
+    name,
+    opac_visible,
+    label,
+    description,
+    datatype,
+    reg_default
+) VALUES (
+    'circ.default_overdue_notices_enabled',
+    TRUE,
+    oils_i18n_gettext(
+        'circ.default_overdue_notices_enabled',
+        'Receive Overdue and Courtesy Emails',
+        'cust',
+        'label'
+    ),
+    oils_i18n_gettext(
+        'circ.default_overdue_notices_enabled',
+        'Receive overdue and predue email notifications',
+        'cust',
+        'description'
+    ),
+    'bool',
+    'true'
+);
 
 -- Add groups for org_unit settings
 INSERT INTO config.settings_group (name, label) VALUES
@@ -3610,6 +3650,15 @@ INSERT into config.org_unit_setting_type
         'coust', 'label'),
     oils_i18n_gettext('circ.holds.expired_patron_block',
         'Block hold request if hold recipient privileges have expired',
+        'coust', 'description'),
+    'bool', null)
+
+,( 'circ.renew.expired_patron_allow', 'circ',
+    oils_i18n_gettext('circ.renew.expired_patron_allow',
+        'Allow renewal request if renewal recipient privileges have expired',
+        'coust', 'label'),
+    oils_i18n_gettext('circ.renew.expired_patron_allow',
+        'If enabled, users within the org unit who are expired may still renew items.',
         'coust', 'description'),
     'bool', null)
 
@@ -5642,6 +5691,30 @@ INSERT into config.org_unit_setting_type
      'For staff-placed holds, in the absence of a patron preferred pickup location, fall back to using the staff workstation OU (rather than patron home OU)',
      'coust', 'description'),
    'bool', null)
+,( 'ui.patron.edit.au.photo_url.require', 'gui',
+    oils_i18n_gettext('ui.patron.edit.au.photo_url.require',
+        'Require Photo URL field on patron registration',
+        'coust', 'label'),
+    oils_i18n_gettext('ui.patron.edit.au.photo_url.require',
+        'The Photo URL field will be required on the patron registration screen.',
+        'coust', 'description'),
+    'bool', null)
+,( 'ui.patron.edit.au.photo_url.show', 'gui',
+    oils_i18n_gettext('ui.patron.edit.au.photo_url.show',
+        'Show Photo URL field on patron registration',
+        'coust', 'label'),
+    oils_i18n_gettext('ui.patron.edit.au.photo_url.show',
+        'The Photo URL field will be shown on the patron registration screen. Showing a field makes it appear with required fields even when not required. If the field is required this setting is ignored.',
+        'coust', 'description'),
+    'bool', null)
+,( 'ui.patron.edit.au.photo_url.suggest', 'gui',
+    oils_i18n_gettext('ui.patron.edit.au.photo_url.suggest',
+        'Suggest Photo URL field on patron registration',
+        'coust', 'label'),
+    oils_i18n_gettext('ui.patron.edit.au.photo_url.suggest',
+        'The Photo URL field will be suggested on the patron registration screen. Suggesting a field makes it appear when suggested fields are shown. If the field is shown or required this setting is ignored.',
+        'coust', 'description'),
+    'bool', null)
 ;
 
 UPDATE config.org_unit_setting_type
@@ -5810,6 +5883,7 @@ INSERT INTO container.user_bucket_type (code,label) VALUES ('folks:hold.view', o
 INSERT INTO container.user_bucket_type (code,label) VALUES ('folks:hold.cancel', oils_i18n_gettext('folks:hold.cancel', 'Cancel Holds', 'cubt', 'label'));
 
 INSERT INTO container.user_bucket_type (code,label) SELECT code,label FROM container.copy_bucket_type where code = 'staff_client';
+INSERT INTO container.user_bucket_type (code,label) VALUES ('hold_subscription', oils_i18n_gettext('hold_subscription', 'Hold Group Container', 'cubt', 'label'));
 
 ----------------------------------
 -- MARC21 record structure data --
@@ -7789,7 +7863,10 @@ INSERT INTO config.coded_value_map
     oils_i18n_gettext(633, 'Blu-ray', 'ccvm', 'search_label')),
 (1737,'search_format','preloadedaudio',
     oils_i18n_gettext(1737, 'Preloaded Audio', 'ccvm', 'value'),
-    oils_i18n_gettext(1737, 'Preloaded Audio', 'ccvm', 'search_label'));
+    oils_i18n_gettext(1737, 'Preloaded Audio', 'ccvm', 'search_label')),
+(1738,'search_format','video',
+    oils_i18n_gettext(1738, 'All Videos', 'ccvm', 'value'),
+    oils_i18n_gettext(1738, 'All Videos', 'ccvm', 'search_label'));
 
 -- Electronic search format, not opac_visible
 INSERT INTO config.coded_value_map
@@ -9293,6 +9370,9 @@ INSERT INTO config.composite_attr_entry_definition
     (coded_value, definition) VALUES
 (1736,'{"0":{"_attr":"item_type","_val":"i"},"1":{"_attr":"item_form","_val":"q"}}');
 
+--all videos
+INSERT INTO config.composite_attr_entry_definition (coded_value, definition) VALUES
+    (1738, '{"_attr":"item_type","_val":"g"}');
 
 -- use the definitions from the icon_format as the basis for the MR hold format definitions
 DO $$
@@ -9473,8 +9553,8 @@ INSERT INTO config.composite_attr_entry_definition (coded_value, definition) VAL
 
 -- Sample Overdue Notice --
 
-INSERT INTO action_trigger.event_definition (id, active, owner, name, hook, validator, reactor, delay, delay_field, group_field, max_delay, template) 
-    VALUES (1, 'f', 1, '7 Day Overdue Email Notification', 'checkout.due', 'CircIsOverdue', 'SendEmail', '7 days', 'due_date', 'usr', '8 days', 
+INSERT INTO action_trigger.event_definition (id, active, owner, name, hook, validator, reactor, delay, delay_field, group_field, max_delay, opt_in_setting, usr_field, template)
+    VALUES (1, 'f', 1, '7 Day Overdue Email Notification', 'checkout.due', 'CircIsOverdue', 'SendEmail', '7 days', 'due_date', 'usr', '8 days', 'circ.default_overdue_notices_enabled', 'usr',
 $$
 [%- USE date -%]
 [%- user = target.0.usr -%]
@@ -10830,8 +10910,8 @@ INSERT INTO config.record_attr_index_norm_map (attr,norm,pos)
 
 -- Sample Pre-due Notice --
 
-INSERT INTO action_trigger.event_definition (id, active, owner, name, hook, validator, reactor, delay, delay_field, group_field, max_delay, template) 
-    VALUES (6, 'f', 1, '3 Day Courtesy Notice', 'checkout.due', 'CircIsOpen', 'SendEmail', '-3 days', 'due_date', 'usr', '-2 days',
+INSERT INTO action_trigger.event_definition (id, active, owner, name, hook, validator, reactor, delay, delay_field, group_field, max_delay, opt_in_setting, usr_field, template)
+    VALUES (6, 'f', 1, '3 Day Courtesy Notice', 'checkout.due', 'CircIsOpen', 'SendEmail', '-3 days', 'due_date', 'usr', '-2 days', 'circ.default_overdue_notices_enabled', 'usr',
 $$
 [%- USE date -%]
 [%- user = target.0.usr -%]
@@ -17344,6 +17424,78 @@ VALUES (currval('action_trigger.event_definition_id_seq'), 'home_ou'),
        (currval('action_trigger.event_definition_id_seq'), 'home_ou.mailing_address'),
        (currval('action_trigger.event_definition_id_seq'), 'home_ou.billing_address');
 
+INSERT INTO action_trigger.event_definition (active, owner, name, hook, validator, reactor, delay, delay_field, group_field, cleanup_success, template)
+    VALUES ('f', 1, 'Hold Group Hold Placed for Patron Email Notification', 'hold_request.success', 'NOOP_True', 'SendEmail', '30 minutes', 'request_time', 'usr', 'CreateHoldNotification',
+$$
+[%- USE date -%]
+[%- user = target.0.usr -%]
+To: [%- params.recipient_email || user.email %]
+From: [%- params.sender_email || default_sender %]
+Date: [%- date.format(date.now, '%a, %d %b %Y %T -0000', gmt => 1) %]
+Subject: Subcription Hold placed for you
+Auto-Submitted: auto-generated
+
+Dear [% user.family_name %], [% user.first_given_name %]
+The following items have been placed on hold for you:
+
+[% FOR hold IN target %]
+    [%- copy_details = helpers.get_copy_bib_basics(hold.current_copy.id) -%]
+    Title: [% copy_details.title %]
+    Author: [% copy_details.author %]
+    Call Number: [% hold.current_copy.call_number.label %]
+    Barcode: [% hold.current_copy.barcode %]
+    Library: [% hold.pickup_lib.name %]
+[% END %]
+
+$$);
+
+INSERT INTO action_trigger.environment (event_def, path ) VALUES
+( currval('action_trigger.event_definition_id_seq'), 'usr' ),
+( currval('action_trigger.event_definition_id_seq'), 'pickup_lib' ),
+( currval('action_trigger.event_definition_id_seq'), 'current_copy.call_number' );
+
+INSERT INTO action_trigger.event_definition (
+    active, owner, name, hook, validator, reactor, cleanup_success,
+    delay, delay_field, group_field, template
+) VALUES (
+    false, 1, 'Hold Group Hold Placed for Patron SMS Notification', 'hold_request.success', 'NOOP_True',
+    'SendSMS', 'CreateHoldNotification', '00:30:00', 'shelf_time', 'sms_notify',
+    '[%- USE date -%]
+[%- user = target.0.usr -%]
+From: [%- params.sender_email || default_sender %]
+Date: [%- date.format(date.now, ''%a, %d %b %Y %T -0000'', gmt => 1) %]
+To: [%- params.recipient_email || helpers.get_sms_gateway_email(target.0.sms_carrier,target.0.sms_notify) %]
+Subject: [% target.size %] subscription hold(s) placed for you
+Auto-Submitted: auto-generated
+
+[% FOR hold IN target %][%-
+  bibxml = helpers.xml_doc( hold.current_copy.call_number.record.marc );
+  title = "";
+  FOR part IN bibxml.findnodes(''//*[@tag="245"]/*[@code="a"]'');
+    title = title _ part.textContent;
+  END;
+  author = bibxml.findnodes(''//*[@tag="100"]/*[@code="a"]'').textContent;
+%][% hold.usr.first_given_name %]:[% title %] @ [% hold.pickup_lib.name %]
+[% END %]
+'
+);
+
+INSERT INTO action_trigger.environment (
+    event_def,
+    path
+) VALUES (
+    currval('action_trigger.event_definition_id_seq'),
+    'current_copy.call_number.record.simple_record'
+), (
+    currval('action_trigger.event_definition_id_seq'),
+    'usr'
+), (
+    currval('action_trigger.event_definition_id_seq'),
+    'pickup_lib.billing_address'
+);
+
+INSERT INTO action_trigger.event_params (event_def, param, value)
+    VALUES (currval('action_trigger.event_definition_id_seq'), 'check_sms_notify', 1);
 
 INSERT INTO config.org_unit_setting_type
 (name, grp, label, description, datatype)
@@ -20282,6 +20434,63 @@ INSERT into config.org_unit_setting_type
         'coust', 'description'),
     'bool', null);
 
+INSERT INTO config.org_unit_setting_type
+( name, grp, label, description, datatype, update_perm )
+VALUES
+('opac.login.shib_sso.enable',
+ 'opac',
+ oils_i18n_gettext('opac.login.shib_sso.enable', 'Enable Shibboleth SSO for the OPAC', 'coust', 'label'),
+ oils_i18n_gettext('opac.login.shib_sso.enable', 'Enable Shibboleth SSO for the OPAC', 'coust', 'description'),
+ 'bool', 627),
+('opac.login.shib_sso.entityId',
+ 'opac',
+ oils_i18n_gettext('opac.login.shib_sso.entityId', 'Shibboleth SSO Entity ID', 'coust', 'label'),
+ oils_i18n_gettext('opac.login.shib_sso.entityId', 'Which configured Entity ID to use for SSO when there is more than one available to Shibboleth', 'coust', 'description'),
+ 'string', 627),
+('opac.login.shib_sso.logout',
+ 'opac',
+ oils_i18n_gettext('opac.login.shib_sso.logout', 'Log out of the Shibboleth IdP', 'coust', 'label'),
+ oils_i18n_gettext('opac.login.shib_sso.logout', 'When logging out of Evergreen, also force a logout of the IdP behind Shibboleth', 'coust', 'description'),
+ 'bool', 627),
+('opac.login.shib_sso.allow_native',
+ 'opac',
+ oils_i18n_gettext('opac.login.shib_sso.allow_native', 'Allow both Shibboleth and native OPAC authentication', 'coust', 'label'),
+ oils_i18n_gettext('opac.login.shib_sso.allow_native', 'When Shibboleth SSO is enabled, also allow native Evergreen authentication', 'coust', 'description'),
+ 'bool', 627),
+('opac.login.shib_sso.evergreen_matchpoint',
+ 'opac',
+ oils_i18n_gettext('opac.login.shib_sso.evergreen_matchpoint', 'Evergreen SSO matchpoint', 'coust', 'label'),
+ oils_i18n_gettext('opac.login.shib_sso.evergreen_matchpoint',
+  'Evergreen-side field to match a patron against for Shibboleth SSO. Default is usrname.  Other reasonable values would be barcode or email.',
+  'coust', 'description'),
+ 'string', 627),
+('opac.login.shib_sso.shib_matchpoint',
+ 'opac',
+ oils_i18n_gettext('opac.login.shib_sso.shib_matchpoint', 'Shibboleth SSO matchpoint', 'coust', 'label'),
+ oils_i18n_gettext('opac.login.shib_sso.shib_matchpoint',
+  'Shibboleth-side field to match a patron against for Shibboleth SSO. Default is uid; use eppn for Active Directory', 'coust', 'description'),
+ 'string', 627)
+;
+
+INSERT INTO config.org_unit_setting_type
+    (name, label, description, grp, datatype)
+VALUES (
+    'holds.subscription.randomize',
+    oils_i18n_gettext(
+        'holds.subscription.randomize',
+        'Randomize group hold order',
+        'coust',
+        'label'
+    ),
+    oils_i18n_gettext(
+        'holds.subscription.randomize',
+        'When placing a batch group hold, randomize the order of the patrons receiving the holds so they are not always in the same order.',
+        'coust',
+        'description'
+    ),
+    'holds',
+    'bool'
+);
 
 INSERT INTO config.workstation_setting_type (name, grp, datatype, label)
 VALUES (
@@ -20354,6 +20563,15 @@ VALUES (
     )
 );
 
+INSERT INTO config.workstation_setting_type (name, grp, datatype, label)
+VALUES (
+    'eg.print.template_context.booking_capture', 'gui', 'string',
+    oils_i18n_gettext(
+        'eg.print.template_context.booking_capture',
+        'Print Template Context: booking_capture',
+        'cwst', 'label'
+    )
+);
 
 INSERT INTO config.workstation_setting_type (name, grp, datatype, label)
 VALUES (
@@ -20716,6 +20934,13 @@ VALUES (
         'cwst', 'label'
     )
 ), (
+    'eg.orgselect.hopeless.wide_holds', 'gui', 'integer',
+    oils_i18n_gettext(
+        'eg.orgselect.hopeless.wide_holds',
+        'Default org unit for hopeless holds interface',
+        'cwst', 'label'
+    )
+), (
     'eg.grid.cat.authority.browse', 'gui', 'object',
     oils_i18n_gettext(
     'eg.grid.cat.authority.browse',
@@ -20998,6 +21223,71 @@ INSERT INTO action_trigger.validator (module, description) VALUES (
     'Curbside', 'Confirm that curbside pickup is enabled for the hold pickup library'
 );
 
+-- geosort
+
+INSERT INTO config.global_flag (name, value, enabled, label)
+VALUES (
+    'opac.use_geolocation',
+    NULL,
+    FALSE,
+    oils_i18n_gettext(
+        'opac.use_geolocation',
+        'Offer use of geographic location services in the public catalog',
+        'cgf', 'label'
+    )
+);
+
+INSERT INTO config.org_unit_setting_type (name, label, grp, description, datatype)
+VALUES (
+    'opac.holdings_sort_by_geographic_proximity',
+    oils_i18n_gettext('opac.holdings_sort_by_geographic_proximity',
+        'Enable Holdings Sort by Geographic Proximity',
+        'coust', 'label'),
+    'opac',
+    oils_i18n_gettext('opac.holdings_sort_by_geographic_proximity',
+        'When set to TRUE, will cause the record details page to display the controls for sorting holdings by geographic proximity. This also depends on the global flag opac.use_geolocation being enabled.',
+        'coust', 'description'),
+    'bool'
+);
+
+INSERT INTO config.org_unit_setting_type (name, label, grp, description, datatype)
+VALUES (
+    'opac.geographic_proximity_in_miles',
+    oils_i18n_gettext('opac.geographic_proximity_in_miles',
+        'Show Geographic Proximity in Miles',
+        'coust', 'label'),
+    'opac',
+    oils_i18n_gettext('opac.geographic_proximity_in_miles',
+        'When set to TRUE, will cause the record details page to show distances for geographic proximity in miles instead of kilometers.',
+        'coust', 'description'),
+    'bool'
+);
+
+INSERT INTO config.org_unit_setting_type (name, label, grp, description, datatype, fm_class)
+VALUES (
+    'opac.geographic_location_service_for_address',
+    oils_i18n_gettext('opac.geographic_location_service_for_address',
+        'Geographic Location Service to use for Addresses',
+        'coust', 'label'),
+    'opac',
+    oils_i18n_gettext('opac.geographic_location_service_for_address',
+        'Specifies which geographic location service to use for converting address input to geographic coordinates.',
+        'coust', 'description'),
+    'link', 'cgs'
+);
+
+INSERT INTO permission.grp_perm_map (grp, perm, depth, grantable)
+    SELECT
+        pgt.id, perm.id, aout.depth, TRUE
+    FROM
+        permission.grp_tree pgt,
+        permission.perm_list perm,
+        actor.org_unit_type aout
+    WHERE
+        (pgt.name = 'Global Administrator' OR pgt.name = 'System Administrator') AND
+        aout.name = 'Consortium' AND
+        (perm.code = 'ADMIN_GEOLOCATION_SERVICES' OR perm.code = 'VIEW_GEOLOCATION_SERVICES');
+
 ------------------- Disabled example A/T defintions ------------------------------
 
 -- Create a "dummy" slot when applicable, and trigger the "offer curbside" events
@@ -21238,3 +21528,109 @@ VALUES (
         'cwst', 'label'
     )
 );
+
+INSERT INTO config.workstation_setting_type (name, grp, datatype, fm_class, label)
+VALUES (
+    'eg.orgselect.catalog.holdings', 'gui', 'link', 'aou',
+    oils_i18n_gettext(
+        'eg.orgselect.catalog.holdings',
+        'Default org unit for catalog holdings tab',
+        'cwst', 'label'
+    )
+);
+
+INSERT INTO config.workstation_setting_type (name, grp, datatype, label)
+VALUES (
+    'eg.catalog.search.form.open', 'gui', 'bool',
+    oils_i18n_gettext(
+        'eg.catalog.search.form.open',
+        'Catalog Search Form Visibility Sticky Setting',
+        'cwst', 'label'
+    )
+);
+
+INSERT INTO config.global_flag (name, value, enabled, label)
+VALUES (
+    'auth.block_expired_staff_login',
+    NULL,
+    FALSE,
+    oils_i18n_gettext(
+        'auth.block_expired_staff_login',
+        'Block the ability of expired user with the STAFF_LOGIN permission to log into Evergreen.',
+        'cgf', 'label'
+    )
+);
+
+INSERT INTO config.internal_flag (name, value, enabled) VALUES ('symspell.prefix_length', '6', TRUE);
+INSERT INTO config.internal_flag (name, value, enabled) VALUES ('symspell.max_edit_distance', '3', TRUE);
+
+INSERT into config.org_unit_setting_type
+( name, grp, label, description, datatype )
+VALUES
+( 'opac.did_you_mean.low_result_threshold', 'opac',
+   oils_i18n_gettext(
+     'opac.did_you_mean.low_result_threshold',
+     'Maximum search result count at which spelling suggestions may be offered',
+     'coust', 'label'),
+   oils_i18n_gettext(
+     'opac.did_you_mean.low_result_threshold',
+     'If a search results in this number or fewer results, and there are correctable spelling mistakes, a suggested search may be provided.',
+     'coust', 'description'),
+   'integer' );
+
+INSERT into config.org_unit_setting_type
+( name, grp, label, description, datatype )
+VALUES
+( 'search.symspell.min_suggestion_use_threshold', 'opac',
+   oils_i18n_gettext(
+     'search.symspell.min_suggestion_use_threshold',
+     'Minimum required uses of a spelling suggestions that may be offered',
+     'coust', 'label'),
+   oils_i18n_gettext(
+     'search.symspell.min_suggestion_use_threshold',
+     'The number of bibliographic records (more or less) that a spelling suggestion must appear in to be considered before offering it to a user. Defaults to 1 (must appear in the bib data).',
+     'coust', 'description'),
+   'integer' );
+
+INSERT into config.org_unit_setting_type
+( name, grp, label, description, datatype )
+VALUES
+( 'search.symspell.soundex.weight', 'opac',
+   oils_i18n_gettext(
+     'search.symspell.soundex.weight',
+     'Soundex score weighting in OPAC spelling suggestions.',
+     'coust', 'label'),
+   oils_i18n_gettext(
+     'search.symspell.soundex.weight',
+     'Soundex, trgm, and keyboard distance similarity measures can be combined to form a secondary ordering parameter for spelling suggestions. This controls the relative weight of the scaled soundex component. Defaults to 0 for "off".',
+     'coust', 'description'),
+   'integer' );
+
+INSERT into config.org_unit_setting_type
+( name, grp, label, description, datatype )
+VALUES
+( 'search.symspell.pg_trgm.weight', 'opac',
+   oils_i18n_gettext(
+     'search.symspell.pg_trgm.weight',
+     'Pg_trgm score weighting in OPAC spelling suggestions.',
+     'coust', 'label'),
+   oils_i18n_gettext(
+     'search.symspell.pg_trgm.weight',
+     'Soundex, pg_trgm, and keyboard distance similarity measures can be combined to form a secondary ordering parameter for spelling suggestions. This controls the relative weight of the scaled pg_trgm component. Defaults to 0 for "off".',
+     'coust', 'description'),
+   'integer' );
+
+INSERT into config.org_unit_setting_type
+( name, grp, label, description, datatype )
+VALUES
+( 'search.symspell.keyboard_distance.weight', 'opac',
+   oils_i18n_gettext(
+     'search.symspell.keyboard_distance.weight',
+     'Keyboard distance score weighting in OPAC spelling suggestions.',
+     'coust', 'label'),
+   oils_i18n_gettext(
+     'search.symspell.keyboard_distance.weight',
+     'Soundex, trgm, and keyboard distance similarity measures can be combined to form a secondary ordering parameter for spelling suggestions. This controls the relative weight of the scaled keyboard distance component. Defaults to 0 for "off".',
+     'coust', 'description'),
+   'integer' );
+

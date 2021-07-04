@@ -79,7 +79,8 @@ angular.module('egCoreMod').run(['egStrings', function(s) {
   s.PAGE_TITLE_PATRON_EDIT = "[% l('Edit') %]";
   s.MERGE_SELF_NOT_ALLOWED = "[% l('Logged in account cannot be merged') %]";
   s.TEST_NOTIFY_SUCCESS = "[% l('Test Notification sent') %]";
-  s.TEST_NOTIFY_FAIL = "[% l('Test Notification failed to send') %]"
+  s.TEST_NOTIFY_FAIL = "[% l('Test Notification failed to send') %]";
+  s.REMOVE_HOLD_SUBSCRIPTIONS = "[% l('Remove selected Hold Groups for user?') %]";
 }]);
 </script>
 
@@ -101,11 +102,11 @@ angular.module('egCoreMod').run(['egStrings', function(s) {
           <div class="flex-cell"
           ng-class="{'patron-summary-alert' : hasAlerts()}">
             [% l('[_1] [_2], [_3] [_4] [_5]', 
-                '{{patron().prefix()}}',
-                '{{patron().family_name()}}',
-                '{{patron().first_given_name()}}',
-                '{{patron().second_given_name()}}',
-                '{{patron().suffix()}}') %]
+                '{{patron().pref_prefix() || patron().prefix()}}',
+                '{{patron().pref_family_name() || patron().family_name()}}',
+                '{{patron().pref_first_given_name() || patron().first_given_name()}}',
+                '{{patron().pref_second_given_name() || patron().second_given_name()}}',
+                '{{patron().pref_suffix() || patron().suffix()}}') %]
                <span ng-if="patron().name_keywords()"> <a title="[% l('Name keywords: ') %]{{patron().name_keywords()}}" class="glyphicon glyphicon-tags"></a>
           </div>
 
@@ -191,6 +192,11 @@ angular.module('egCoreMod').run(['egStrings', function(s) {
           <li>
             <a href="./circ/patron/{{patron().id()}}/stat_cats">
               [% l('Statistical Categories') %]
+            </a>
+          </li>
+          <li>
+            <a href="./circ/patron/{{patron().id()}}/hold_subscriptions">
+              [% l('Hold Groups') %]
             </a>
           </li>
           <li>

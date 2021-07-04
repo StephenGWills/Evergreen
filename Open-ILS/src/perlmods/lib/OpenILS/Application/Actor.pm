@@ -489,6 +489,10 @@ sub update_patron {
             return $e->die_event unless
                 $e->allowed('BAR_PATRON', $patron->home_ou);
         }
+        if(($patron->photo_url)) {
+            return $e->die_event unless
+                $e->allowed('UPDATE_USER_PHOTO_URL', $patron->home_ou);
+        }
     } else {
         $new_patron = $patron;
 
@@ -504,6 +508,11 @@ sub update_patron {
 
             $barred_hook = $U->is_true($new_patron->barred) ?
                 'au.barred' : 'au.unbarred';
+        }
+
+        if($old_patron->photo_url ne $new_patron->photo_url) {
+            my $perm = 'UPDATE_USER_PHOTO_URL';
+            return $e->die_event unless $e->allowed($perm, $patron->home_ou);
         }
 
         # update the password by itself to avoid the password protection magic
@@ -1429,6 +1438,30 @@ sub get_my_org_path {
         $org_id );
 }
 
+__PACKAGE__->register_method(
+    method   => "retrieve_coordinates",
+    api_name => "open-ils.actor.geo.retrieve_coordinates",
+    signature => {
+        params => [
+            {desc => 'Authentication token', type => 'string' },
+            {type => 'number', desc => 'Context Organizational Unit'},
+            {type => 'string', desc => 'Address to look-up as a text string'}
+        ],
+        return => { desc => 'Hash/object containing latitude and longitude for the provided address.'}
+    }
+);
+
+sub retrieve_coordinates {
+    my( $self, $client, $auth, $org_id, $addr_string ) = @_;
+    my $e = new_editor(authtoken=>$auth);
+    return $e->event unless $e->checkauth;
+    $org_id = $e->requestor->ws_ou unless defined $org_id;
+
+    return $apputils->simple_scalar_request(
+        "open-ils.geo",
+        "open-ils.geo.retrieve_coordinates",
+        $org_id, $addr_string );
+}
 
 __PACKAGE__->register_method(
     method   => "patron_adv_search",
@@ -3766,16 +3799,49 @@ __PACKAGE__->register_method (
     method      => 'get_itemsout_notices',
     api_name    => 'open-ils.actor.user.itemsout.notices',
     stream      => 1,
-    argc        => 3
+    argc        => 2,
+    signature   => {
+        desc => q/Summary counts of circulat notices/,
+        params => [
+            {desc => 'authtoken', type => 'string'},
+            {desc => 'circulation identifiers', type => 'array of numbers'}
+        ],
+        return => q/Stream of summary objects/
+    }
 );
 
-sub get_itemsout_notices{
-    my( $self, $conn, $auth, $circId, $patronId) = @_;
+sub get_itemsout_notices {
+    my ($self, $client, $auth, $circ_ids) = @_;
 
     my $e = new_editor(authtoken => $auth);
     return $e->event unless $e->checkauth;
 
+    $circ_ids = [$circ_ids] unless ref $circ_ids eq 'ARRAY';
+
+    for my $circ_id (@$circ_ids) {
+        my $resp = get_itemsout_notices_impl($e, $circ_id);
+
+        if ($U->is_event($resp)) {
+            $client->respond($resp);
+            return;
+        }
+
+        $client->respond({circ_id => $circ_id, %$resp});
+    }
+
+    return undef;
+}
+
+
+
+sub get_itemsout_notices_impl {
+    my ($e, $circId) = @_;
+
     my $requestorId = $e->requestor->id;
+
+    my $circ = $e->retrieve_action_circulation($circId) or return $e->event;
+
+    my $patronId = $circ->usr;
 
     if( $patronId ne $requestorId ){
         my $user = $e->retrieve_actor_user($requestorId) or return $e->event;
@@ -3796,15 +3862,20 @@ sub get_itemsout_notices{
     #
 
     my $ctx_loc = $e->requestor->ws_ou;
-    my $exclude_courtesy_notices = $U->ou_ancestor_setting_value($ctx_loc, 'webstaff.circ.itemsout_notice_count_excludes_courtesies');
+    my $exclude_courtesy_notices = $U->ou_ancestor_setting_value(
+        $ctx_loc, 'webstaff.circ.itemsout_notice_count_excludes_courtesies');
+
     my $query = {
 	    select => { atev => ["complete_time"] },
 	    from => {
 		    atev => {
-			    atevdef => { field => "id",fkey => "event_def", join => { ath => { field => "key", fkey => "hook" }} }
+			    atevdef => { field => "id",fkey => "event_def"}
 		    }
 	    },
-	    where => {"+ath" => { key => "checkout.due" },"+atevdef" => { active => 't' },"+atev" => { target => $circId, state => 'complete' }}
+	    where => {
+            "+atevdef" => { active => 't', hook => 'checkout.due' },
+            "+atev" => { target => $circId, state => 'complete' }
+        }
     };
 
     if ($exclude_courtesy_notices){
@@ -3825,8 +3896,7 @@ sub get_itemsout_notices{
 	}
    }
 
-    $conn->respond(\%resblob);
-    return undef;
+    return \%resblob;
 }
 
 __PACKAGE__->register_method (
